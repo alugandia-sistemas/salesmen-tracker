@@ -681,25 +681,75 @@ const fetchData = async () => {
 };
 
 const getCurrentLocation = () => {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        currentLocation.value = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude
-        };
-        newClient.value.latitude = position.coords.latitude;
-        newClient.value.longitude = position.coords.longitude;
-        alert('Ubicación obtenida correctamente');
-      },
-      (error) => {
-        console.error('Error getting location:', error);
-        alert('No se pudo obtener la ubicación');
-      }
-    );
-  } else {
+  if (!navigator.geolocation) {
     alert('Geolocalización no soportada por el navegador');
+    return;
   }
+
+  // Mostrar mensaje de espera
+  const loadingMsg = 'Obteniendo ubicación precisa...';
+  console.log(loadingMsg);
+
+  // Opciones de alta precisión
+  const options = {
+    enableHighAccuracy: true,  // ⭐ Usar GPS de alta precisión
+    timeout: 30000,            // Esperar hasta 30 segundos
+    maximumAge: 0              // No usar caché, siempre obtener nueva ubicación
+  };
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const accuracy = position.coords.accuracy; // Precisión en metros
+      
+      currentLocation.value = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: accuracy,
+        altitude: position.coords.altitude,
+        altitudeAccuracy: position.coords.altitudeAccuracy,
+        heading: position.coords.heading,
+        speed: position.coords.speed,
+        timestamp: position.timestamp
+      };
+
+      // Validar precisión
+      if (accuracy > 50) {
+        alert(`⚠️ Ubicación obtenida con baja precisión: ±${accuracy.toFixed(0)}m. Intenta moverte a un lugar con mejor señal GPS.`);
+      } else if (accuracy > 20) {
+        alert(`✓ Ubicación obtenida con precisión moderada: ±${accuracy.toFixed(0)}m`);
+      } else {
+        alert(`✅ Ubicación obtenida con alta precisión: ±${accuracy.toFixed(0)}m`);
+      }
+
+      console.log('Ubicación obtenida:', {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: `±${accuracy.toFixed(1)}m`,
+        timestamp: new Date(position.timestamp).toLocaleString()
+      });
+    },
+    (error) => {
+      console.error('Error getting location:', error);
+      
+      let errorMsg = 'No se pudo obtener la ubicación. ';
+      switch(error.code) {
+        case error.PERMISSION_DENIED:
+          errorMsg += 'Permiso denegado. Habilita la ubicación en tu navegador.';
+          break;
+        case error.POSITION_UNAVAILABLE:
+          errorMsg += 'Información de ubicación no disponible. Verifica tu conexión GPS.';
+          break;
+        case error.TIMEOUT:
+          errorMsg += 'Timeout. La solicitud tardó demasiado. Intenta de nuevo.';
+          break;
+        default:
+          errorMsg += 'Error desconocido.';
+      }
+      
+      alert(errorMsg);
+    },
+    options  // ⭐ Pasar opciones de alta precisión
+  );
 };
 
 const createRoute = async () => {
