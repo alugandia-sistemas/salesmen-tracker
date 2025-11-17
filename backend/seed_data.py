@@ -10,7 +10,6 @@ def seed_database():
             return
         
         sellers = [
-            Seller(name="José Malo", email="jose.malo@alugandia.es", phone="962873543", active=1),
             Seller(name="Ernesto Arocas", email="earoca@alugandia.es", phone="962873543", active=1),
             Seller(name="Jose Manuel Gómez", email="jmgomez@alugandia.es", phone="962873543", active=1)
         ]

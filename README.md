@@ -328,8 +328,8 @@ ST_DWithin(
 ### Datos de Prueba
 El sistema incluye datos de prueba de la zona:
 - **Vendedores**: Comercial Valencia 1, Comercial Alicante 1, Jose Manuel Gómez
-- **Clientes**: Carpinterías y empresas de aluminio en Valencia, Gandia, Alzira, Xàtiva, etc.
-- **Coordenadas GPS reales** de la Comunidad Valenciana
+- **Clientes**: Carpinterías y empresas de aluminio en Comunitat Valenciana.
+- **Coordenadas GPS reales** de la Comunitat Valenciana
 
 ---
 
