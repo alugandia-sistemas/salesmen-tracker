@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, Enum, create_engine, text
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, Enum
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, relationship, sessionmaker
+from sqlalchemy.orm import Session, relationship
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from geoalchemy2 import Geometry, Geography
 from datetime import datetime, timedelta
@@ -18,22 +18,13 @@ import math
 # CONFIGURACIÓN Y CONEXIÓN BD
 # ============================================================================
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/salesmen_tracker")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
-
-# ✅ HABILITAR POSTGIS AUTOMÁTICAMENTE AL STARTUP
-def init_postgis():
-    """Habilita PostGIS en la base de datos si no está activo"""
-    try:
-        with engine.connect() as connection:
-            connection.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
-            connection.commit()
-            print("✅ PostGIS habilitado correctamente")
-    except Exception as e:
-        print(f"⚠️ PostGIS: {str(e)}")
 
 app = FastAPI(title="Salesmen Tracker - Alugandia")
 
@@ -163,8 +154,6 @@ class Opportunity(Base):
 
 
 # Crear tablas
-# Inicializar PostGIS y crear tablas
-init_postgis()
 Base.metadata.create_all(bind=engine)
 
 # ============================================================================
@@ -396,7 +385,7 @@ def create_client(
     longitude: float,
     client_type: str,
     email: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db) 
 ):
     """
     Crear cliente con ubicación GPS
@@ -428,7 +417,7 @@ def nearby_clients(
     latitude: float,
     longitude: float,
     radius_km: float = 5,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db) 
 ):
     """
     Buscar clientes cercanos usando PostGIS
@@ -456,7 +445,7 @@ def nearby_clients(
 def list_routes(
     seller_id: Optional[str] = None,
     status: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db) 
 ):
     """Listar rutas con filtros"""
     query = db.query(Route)
@@ -475,7 +464,7 @@ def create_route(
     client_id: str,
     planned_date: str,  # YYYY-MM-DD
     planned_time: str,  # HH:MM
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db) 
 ):
     """Crear ruta"""
     route = Route(
@@ -501,7 +490,7 @@ def create_route(
 async def checkin(
     request: CheckInRequest,
     photo: Optional[UploadFile] = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db) 
 ):
     """
     ✅ CHECK-IN MEJORADO CON VALIDACIÓN GEOESPACIAL ROBUSTA
@@ -612,7 +601,7 @@ async def checkin(
 @app.post("/visits/checkout/", response_model=CheckInResponse)
 async def checkout(
     request: CheckOutRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db) 
 ):
     """
     CHECK-OUT: Finalizar visita
@@ -677,7 +666,7 @@ async def checkout(
 def list_visits(
     seller_id: Optional[str] = None,
     client_id: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db) 
 ):
     """Listar visitas con filtros"""
     query = db.query(Visit)
@@ -746,7 +735,7 @@ def dashboard_stats(db: Session = Depends(get_db)):
 @app.get("/dashboard/fraud-alerts/")
 def fraud_alerts(
     hours: int = 24,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db) 
 ):
     """
     ✅ ALERTAS DE FRAUDE PARA GERENCIA
@@ -809,7 +798,7 @@ def create_opportunity(
     title: str,
     estimated_value: float,
     description: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db) 
 ):
     """Crear oportunidad"""
     opportunity = Opportunity(
