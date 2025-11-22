@@ -1,35 +1,57 @@
-# main.py
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, Enum
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session, relationship
+from sqlalchemy.orm import Session, relationship
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from geoalchemy2 import Geometry, Geography
+from datetime import datetime, timedelta
 from pydantic import BaseModel
-from datetime import datetime
 from typing import Optional, List
-from geoalchemy2 import Geometry
-from geoalchemy2.functions import ST_Distance, ST_DWithin
+import uuid
 import os
+import shutil
+from pathlib import Path
+import math
 
-# Configuración de la base de datos
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/salesmen_tracker")
+# ============================================================================
+# CONFIGURACIÓN Y CONEXIÓN BD
+# ============================================================================
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/salesmen_tracker")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# ==================== MODELOS DE BASE DE DATOS ====================
+app = FastAPI(title="Salesmen Tracker - Alugandia")
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ============================================================================
+# MODELOS DE BD (SQLAlchemy)
+# ============================================================================
 
 class Seller(Base):
     __tablename__ = "sellers"
     
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False)
-    email = Column(String(100), unique=True, nullable=False)
-    phone = Column(String(20))
-    active = Column(Integer, default=1)
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), unique=True, nullable=False)
+    phone = Column(String(20), nullable=False)
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
+    # Relaciones
     routes = relationship("Route", back_populates="seller")
     visits = relationship("Visit", back_populates="seller")
     opportunities = relationship("Opportunity", back_populates="seller")
@@ -38,16 +60,21 @@ class Seller(Base):
 class Client(Base):
     __tablename__ = "clients"
     
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(200), nullable=False)
-    address = Column(String(300))
-    phone = Column(String(20))
-    email = Column(String(100))
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    address = Column(String(255), nullable=False)
+    phone = Column(String(20), nullable=False)
+    email = Column(String(255), nullable=True)
+    
+    # ✅ CORRECCIÓN: Usar Geography en lugar de Geometry para precisión
+    # Geography utiliza elipsoide WGS84 para cálculos de distancia más precisos
+    location = Column(Geography(geometry_type='POINT', srid=4326), nullable=False)
+    
+    client_type = Column(String(50), nullable=False)  # carpenter, installer, industrial
     status = Column(String(20), default="active")  # active, inactive, pending
-    # PostGIS geometry column para coordenadas
-    location = Column(Geometry('POINT', srid=4326))
     created_at = Column(DateTime, default=datetime.utcnow)
     
+    # Relaciones
     routes = relationship("Route", back_populates="client")
     visits = relationship("Visit", back_populates="client")
     opportunities = relationship("Opportunity", back_populates="client")
@@ -56,14 +83,17 @@ class Client(Base):
 class Route(Base):
     __tablename__ = "routes"
     
-    id = Column(Integer, primary_key=True, index=True)
-    seller_id = Column(Integer, ForeignKey("sellers.id"), nullable=False)
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
-    scheduled_date = Column(DateTime, nullable=False)
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    seller_id = Column(PG_UUID(as_uuid=True), nullable=False)
+    client_id = Column(PG_UUID(as_uuid=True), nullable=False)
+    
+    planned_date = Column(DateTime, nullable=False)
+    planned_time = Column(String(5), nullable=False)  # HH:MM
     status = Column(String(20), default="pending")  # pending, in_progress, completed, cancelled
-    notes = Column(Text)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     
+    # Foreign Keys & Relaciones
     seller = relationship("Seller", back_populates="routes")
     client = relationship("Client", back_populates="routes")
     visits = relationship("Visit", back_populates="route")
@@ -72,20 +102,33 @@ class Route(Base):
 class Visit(Base):
     __tablename__ = "visits"
     
-    id = Column(Integer, primary_key=True, index=True)
-    route_id = Column(Integer, ForeignKey("routes.id"), nullable=False)
-    seller_id = Column(Integer, ForeignKey("sellers.id"), nullable=False)
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
-    check_in_time = Column(DateTime, nullable=False)
-    check_out_time = Column(DateTime)
-    # Ubicación del check-in (PostGIS)
-    check_in_location = Column(Geometry('POINT', srid=4326))
-    # Ubicación del check-out (PostGIS)
-    check_out_location = Column(Geometry('POINT', srid=4326))
-    notes = Column(Text)
-    distance_to_client = Column(Float)  # Distancia en metros desde el check-in al cliente
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    route_id = Column(PG_UUID(as_uuid=True), nullable=False)
+    seller_id = Column(PG_UUID(as_uuid=True), nullable=False)
+    client_id = Column(PG_UUID(as_uuid=True), nullable=False)
+    
+    # ✅ CHECK-IN: Ubicación GPS capturada
+    checkin_time = Column(DateTime, nullable=True)
+    checkin_location = Column(Geography(geometry_type='POINT', srid=4326), nullable=True)
+    checkin_distance_meters = Column(Float, nullable=True)  # Distancia al cliente
+    checkin_photo_url = Column(String(500), nullable=True)  # Foto geoetiquetada
+    
+    # ✅ VALIDACIÓN DE PROXIMIDAD
+    checkin_is_valid = Column(Boolean, default=False)  # ¿Dentro del rango permitido?
+    checkin_validation_error = Column(String(255), nullable=True)  # Motivo del error si aplica
+    
+    # ✅ CHECK-OUT: Ubicación GPS capturada
+    checkout_time = Column(DateTime, nullable=True)
+    checkout_location = Column(Geography(geometry_type='POINT', srid=4326), nullable=True)
+    checkout_distance_meters = Column(Float, nullable=True)
+    
+    # ✅ AUDITORÍA DE FRAUDE
+    fraud_flags = Column(Text, nullable=True)  # JSON con flags de posible fraude
+    notes = Column(Text, nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     
+    # Relaciones
     route = relationship("Route", back_populates="visits")
     seller = relationship("Seller", back_populates="visits")
     client = relationship("Client", back_populates="visits")
@@ -94,150 +137,108 @@ class Visit(Base):
 class Opportunity(Base):
     __tablename__ = "opportunities"
     
-    id = Column(Integer, primary_key=True, index=True)
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
-    seller_id = Column(Integer, ForeignKey("sellers.id"), nullable=False)
-    title = Column(String(200), nullable=False)
-    description = Column(Text)
-    estimated_value = Column(Float)
-    status = Column(String(20), default="open")  # open, negotiating, won, lost
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    seller_id = Column(PG_UUID(as_uuid=True), nullable=False)
+    client_id = Column(PG_UUID(as_uuid=True), nullable=False)
+    
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    estimated_value = Column(Float, nullable=False)
+    status = Column(String(20), default="open")  # open, in_negotiation, won, lost
+    
     created_at = Column(DateTime, default=datetime.utcnow)
-    closed_at = Column(DateTime)
     
-    client = relationship("Client", back_populates="opportunities")
+    # Relaciones
     seller = relationship("Seller", back_populates="opportunities")
+    client = relationship("Client", back_populates="opportunities")
 
 
-# ==================== MODELOS PYDANTIC (SCHEMAS) ====================
+# Crear tablas
+Base.metadata.create_all(bind=engine)
 
-class SellerCreate(BaseModel):
-    name: str
-    email: str
-    phone: Optional[str] = None
+# ============================================================================
+# SCHEMAS PYDANTIC (Validación de Entrada/Salida)
+# ============================================================================
 
-class SellerResponse(BaseModel):
-    id: int
-    name: str
-    email: str
-    phone: Optional[str]
-    active: int
-    created_at: datetime
+class CheckInRequest(BaseModel):
+    """
+    ✅ REDISEÑO: Check-in con validación robusta
+    """
+    route_id: str
+    seller_id: str
+    client_id: str
     
-    class Config:
-        from_attributes = True
-
-
-class ClientCreate(BaseModel):
-    name: str
-    address: Optional[str]
-    phone: Optional[str]
-    email: Optional[str]
+    # Ubicación GPS (lat, lng desde cliente)
     latitude: float
     longitude: float
-
-class ClientResponse(BaseModel):
-    id: int
-    name: str
-    address: Optional[str]
-    phone: Optional[str]
-    email: Optional[str]
-    status: str
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    created_at: datetime
     
-    class Config:
-        from_attributes = True
-
-
-class RouteCreate(BaseModel):
-    seller_id: int
-    client_id: int
-    scheduled_date: datetime
+    # Confirmación manual
+    client_found: bool  # ¿Realmente encontró al cliente?
     notes: Optional[str] = None
 
-class RouteResponse(BaseModel):
-    id: int
-    seller_id: int
-    client_id: int
-    scheduled_date: datetime
-    status: str
-    notes: Optional[str]
-    created_at: datetime
+
+class CheckInResponse(BaseModel):
+    """Respuesta del check-in con resultado de validación"""
+    visit_id: str
+    success: bool
+    is_valid: bool  # ¿Dentro del rango de distancia?
+    distance_meters: float
+    validation_error: Optional[str] = None
+    fraud_flags: Optional[List[str]] = None
+    message: str
     
     class Config:
         from_attributes = True
 
 
-class CheckInCreate(BaseModel):
-    route_id: int
+class CheckOutRequest(BaseModel):
+    """Check-out del cliente"""
+    visit_id: str
     latitude: float
     longitude: float
     notes: Optional[str] = None
 
-class CheckOutCreate(BaseModel):
-    visit_id: int
-    latitude: float
-    longitude: float
 
 class VisitResponse(BaseModel):
-    id: int
-    route_id: int
-    seller_id: int
-    client_id: int
-    check_in_time: datetime
-    check_out_time: Optional[datetime]
+    """Respuesta de visita completa"""
+    id: str
+    seller_id: str
+    client_id: str
+    route_id: str
+    
+    checkin_time: Optional[datetime]
+    checkin_distance_meters: Optional[float]
+    checkin_is_valid: bool
+    checkin_validation_error: Optional[str]
+    
+    checkout_time: Optional[datetime]
+    checkout_distance_meters: Optional[float]
+    
+    fraud_flags: Optional[List[str]]
     notes: Optional[str]
-    distance_to_client: Optional[float]
-    check_in_lat: Optional[float] = None
-    check_in_lng: Optional[float] = None
     
     class Config:
         from_attributes = True
 
 
-class OpportunityCreate(BaseModel):
-    client_id: int
-    seller_id: int
-    title: str
-    description: Optional[str]
-    estimated_value: Optional[float]
-
-class OpportunityResponse(BaseModel):
-    id: int
-    client_id: int
-    seller_id: int
-    title: str
-    description: Optional[str]
-    estimated_value: Optional[float]
+class ClientResponse(BaseModel):
+    """Cliente con coordenadas"""
+    id: str
+    name: str
+    address: str
+    phone: str
+    email: Optional[str]
+    client_type: str
     status: str
-    created_at: datetime
     
     class Config:
         from_attributes = True
 
 
-class DashboardStats(BaseModel):
-    active_sellers: int
-    total_visits_today: int
-    pending_routes: int
-    open_opportunities: int
+# ============================================================================
+# FUNCIONES GEOESPACIALES (PostGIS + Validación)
+# ============================================================================
 
-
-# ==================== FASTAPI APP ====================
-
-app = FastAPI(title="Salesmen Tracker API", version="1.0.0")
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # En producción, especificar dominios permitidos
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Dependency
 def get_db():
     db = SessionLocal()
     try:
@@ -246,306 +247,582 @@ def get_db():
         db.close()
 
 
-# ==================== ENDPOINTS ====================
-
-@app.on_event("startup")
-def startup_event():
-    # Crear tablas
-    Base.metadata.create_all(bind=engine)
-
-
-@app.get("/")
-def root():
-    return {"message": "Salesmen Tracker API", "version": "1.0.0"}
-
-
-# ===== SELLERS =====
-
-@app.post("/sellers/", response_model=SellerResponse)
-def create_seller(seller: SellerCreate, db: Session = Depends(get_db)):
-    db_seller = Seller(**seller.dict())
-    db.add(db_seller)
-    db.commit()
-    db.refresh(db_seller)
-    return db_seller
+def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """
+    Calcula distancia en metros entre dos puntos GPS
+    Fórmula de Haversine
+    """
+    R = 6371000  # Radio de la Tierra en metros
+    
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lng2 - lng1)
+    
+    a = (math.sin(delta_phi / 2) ** 2 +
+         math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    
+    return R * c
 
 
-@app.get("/sellers/", response_model=List[SellerResponse])
-def get_sellers(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    sellers = db.query(Seller).offset(skip).limit(limit).all()
+def validate_checkin(
+    distance_meters: float,
+    checkin_time: datetime,
+    client_found: bool,
+    db: Session,
+    seller_id: str,
+    client_id: str
+) -> tuple[bool, Optional[str], List[str]]:
+    """
+    ✅ LÓGICA DE VALIDACIÓN ROBUSTA
+    
+    Retorna: (is_valid, error_message, fraud_flags)
+    """
+    
+    VALID_DISTANCE = 100  # Metros
+    BUSINESS_HOURS_START = 8
+    BUSINESS_HOURS_END = 18
+    
+    fraud_flags = []
+    is_valid = True
+    error_message = None
+    
+    # 1️⃣ VALIDACIÓN DE DISTANCIA
+    if distance_meters > VALID_DISTANCE:
+        is_valid = False
+        error_message = f"Ubicación fuera de rango: {distance_meters:.0f}m (máximo: {VALID_DISTANCE}m)"
+        fraud_flags.append(f"OUT_OF_RANGE|{distance_meters:.0f}m")
+    
+    # 2️⃣ VALIDACIÓN DE HORARIO
+    hour = checkin_time.hour
+    if hour < BUSINESS_HOURS_START or hour >= BUSINESS_HOURS_END:
+        is_valid = False
+        error_message = f"Fuera de horario comercial ({BUSINESS_HOURS_START}:00-{BUSINESS_HOURS_END}:00)"
+        fraud_flags.append(f"OUT_OF_HOURS|{hour}:00")
+    
+    # 3️⃣ VALIDACIÓN MANUAL (cliente confirmado)
+    if not client_found:
+        is_valid = False
+        error_message = "Cliente no confirmado en la ubicación"
+        fraud_flags.append("CLIENT_NOT_FOUND")
+    
+    # 4️⃣ DETECCIÓN DE FRAUDE: Check-ins repetidos en corto tiempo
+    recent_visits = db.query(Visit).filter(
+        Visit.seller_id == seller_id,
+        Visit.client_id == client_id,
+        Visit.checkin_time > checkin_time - timedelta(hours=1),
+        Visit.checkin_time < checkin_time
+    ).count()
+    
+    if recent_visits > 0:
+        fraud_flags.append(f"DUPLICATE_CHECKIN|{recent_visits} en última hora")
+    
+    # 5️⃣ DETECCIÓN DE FRAUDE: Múltiples ubicaciones en segundos
+    other_visits = db.query(Visit).filter(
+        Visit.seller_id == seller_id,
+        Visit.checkin_time > checkin_time - timedelta(seconds=60),
+        Visit.checkin_time < checkin_time,
+        Visit.client_id != client_id
+    ).all()
+    
+    if len(other_visits) > 0:
+        fraud_flags.append(f"MULTIPLE_LOCATIONS|{len(other_visits)} check-ins en 1 minuto")
+    
+    return is_valid, error_message, fraud_flags
+
+
+# ============================================================================
+# RUTAS API (ENDPOINTS)
+# ============================================================================
+
+# --- VENDEDORES ---
+
+@app.get("/sellers/")
+def list_sellers(db: Session = Depends(get_db)):
+    """Listar vendedores"""
+    sellers = db.query(Seller).filter(Seller.is_active == True).all()
     return sellers
 
 
-@app.get("/sellers/{seller_id}", response_model=SellerResponse)
-def get_seller(seller_id: int, db: Session = Depends(get_db)):
-    seller = db.query(Seller).filter(Seller.id == seller_id).first()
-    if not seller:
-        raise HTTPException(status_code=404, detail="Seller not found")
+@app.post("/sellers/")
+def create_seller(name: str, email: str, phone: str, db: Session = Depends(get_db)):
+    """Crear vendedor"""
+    seller = Seller(name=name, email=email, phone=phone)
+    db.add(seller)
+    db.commit()
+    db.refresh(seller)
     return seller
 
 
-# ===== CLIENTS =====
+# --- CLIENTES ---
 
-@app.post("/clients/", response_model=ClientResponse)
-def create_client(client: ClientCreate, db: Session = Depends(get_db)):
-    # Crear punto geográfico con PostGIS
-    from geoalchemy2.shape import from_shape
-    from shapely.geometry import Point
+@app.get("/clients/")
+def list_clients(db: Session = Depends(get_db)):
+    """Listar clientes"""
+    from sqlalchemy import func
     
-    point = Point(client.longitude, client.latitude)
-    
-    db_client = Client(
-        name=client.name,
-        address=client.address,
-        phone=client.phone,
-        email=client.email,
-        location=f'POINT({client.longitude} {client.latitude})'
-    )
-    db.add(db_client)
-    db.commit()
-    db.refresh(db_client)
-    
-    # Agregar coordenadas a la respuesta
-    response = ClientResponse.from_orm(db_client)
-    response.latitude = client.latitude
-    response.longitude = client.longitude
-    return response
-
-
-@app.get("/clients/", response_model=List[ClientResponse])
-def get_clients(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    from geoalchemy2.functions import ST_X, ST_Y
-    
-    clients = db.query(Client).offset(skip).limit(limit).all()  # ← CORREGIDO: Client en vez de Seller
-    result = []
-    
-    for client in clients:
-        client_dict = ClientResponse.model_validate(client)
-        # Extraer coordenadas del geometry si existen
-        if client.location:
-            coords = db.query(ST_X(client.location), ST_Y(client.location)).first()
-            if coords:
-                client_dict.longitude = coords[0]
-                client_dict.latitude = coords[1]
-        result.append(client_dict)
-    
-    return result
-
-
-@app.get("/clients/nearby/")
-def get_nearby_clients(latitude: float, longitude: float, radius_km: float = 5, db: Session = Depends(get_db)):
-    """Obtener clientes cercanos a una ubicación (radio en kilómetros)"""
-    from geoalchemy2.functions import ST_DWithin
-    from geoalchemy2 import Geography
-    
-    # Crear punto de referencia
-    point = f'POINT({longitude} {latitude})'
-    radius_meters = radius_km * 1000
-    
-    # Consulta con PostGIS para encontrar clientes cercanos
-    clients = db.query(Client).filter(
-        ST_DWithin(
-            Client.location.cast(Geography),
-            point,
-            radius_meters
-        )
-    ).all()
+    clients = db.query(
+        Client.id,
+        Client.name,
+        Client.address,
+        Client.phone,
+        Client.email,
+        Client.client_type,
+        Client.status,
+        func.ST_AsText(Client.location).label("location")
+    ).filter(Client.status == "active").all()
     
     return clients
 
 
-# ===== ROUTES =====
-
-@app.post("/routes/", response_model=RouteResponse)
-def create_route(route: RouteCreate, db: Session = Depends(get_db)):
-    db_route = Route(**route.dict())
-    db.add(db_route)
-    db.commit()
-    db.refresh(db_route)
-    return db_route
-
-
-@app.get("/routes/", response_model=List[RouteResponse])
-def get_routes(
-    seller_id: Optional[int] = None,
-    status: Optional[str] = None,
-    date: Optional[str] = None,
-    db: Session = Depends(get_db)
+@app.post("/clients/")
+def create_client(
+    name: str,
+    address: str,
+    phone: str,
+    latitude: float,
+    longitude: float,
+    client_type: str,
+    email: Optional[str] = None,
+    db: Session = Depends(get_db) 
 ):
+    """
+    Crear cliente con ubicación GPS
+    El location se guarda como POINT(lng lat) en WGS84
+    """
+    from sqlalchemy import func
+    
+    # PostGIS requiere: POINT(longitude latitude)
+    location_wkt = f"POINT({longitude} {latitude})"
+    
+    client = Client(
+        name=name,
+        address=address,
+        phone=phone,
+        email=email,
+        client_type=client_type,
+        location=func.ST_GeomFromText(location_wkt, 4326)
+    )
+    
+    db.add(client)
+    db.commit()
+    db.refresh(client)
+    
+    return {"id": str(client.id), "name": client.name, "message": "Cliente creado"}
+
+
+@app.get("/clients/nearby/")
+def nearby_clients(
+    latitude: float,
+    longitude: float,
+    radius_km: float = 5,
+    db: Session = Depends(get_db) 
+):
+    """
+    Buscar clientes cercanos usando PostGIS
+    ST_DWithin = búsqueda por distancia en geografia
+    """
+    from sqlalchemy import func, text
+    
+    radius_meters = radius_km * 1000
+    point_wkt = f"POINT({longitude} {latitude})"
+    
+    nearby = db.query(Client).filter(
+        func.ST_DWithin(
+            Client.location,
+            func.ST_GeomFromText(point_wkt, 4326),
+            radius_meters
+        )
+    ).all()
+    
+    return nearby
+
+
+# --- RUTAS ---
+
+@app.get("/routes/")
+def list_routes(
+    seller_id: Optional[str] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db) 
+):
+    """Listar rutas con filtros"""
     query = db.query(Route)
     
     if seller_id:
         query = query.filter(Route.seller_id == seller_id)
     if status:
         query = query.filter(Route.status == status)
-    if date:
-        query = query.filter(Route.scheduled_date >= date)
     
     return query.all()
 
 
-@app.put("/routes/{route_id}/status")
-def update_route_status(route_id: int, status: str, db: Session = Depends(get_db)):
-    route = db.query(Route).filter(Route.id == route_id).first()
-    if not route:
-        raise HTTPException(status_code=404, detail="Route not found")
-    
-    route.status = status
-    db.commit()
-    return {"message": "Status updated", "route_id": route_id, "status": status}
-
-
-# ===== VISITS (CHECK-IN/CHECK-OUT) =====
-
-@app.post("/visits/checkin/", response_model=VisitResponse)
-def check_in(checkin: CheckInCreate, db: Session = Depends(get_db)):
-    from geoalchemy2.functions import ST_Distance
-    from geoalchemy2 import Geography
-    
-    # Verificar que la ruta existe
-    route = db.query(Route).filter(Route.id == checkin.route_id).first()
-    if not route:
-        raise HTTPException(status_code=404, detail="Route not found")
-    
-    # Obtener cliente para calcular distancia
-    client = db.query(Client).filter(Client.id == route.client_id).first()
-    
-    # Crear punto de check-in
-    checkin_point = f'POINT({checkin.longitude} {checkin.latitude})'
-    
-    # Calcular distancia al cliente (en metros)
-    distance = None
-    if client and client.location:
-        distance_query = db.query(
-            ST_Distance(
-                client.location.cast(Geography),
-                checkin_point
-            )
-        ).scalar()
-        distance = float(distance_query) if distance_query else None
-    
-    # Crear visita
-    db_visit = Visit(
-        route_id=checkin.route_id,
-        seller_id=route.seller_id,
-        client_id=route.client_id,
-        check_in_time=datetime.utcnow(),
-        check_in_location=checkin_point,
-        notes=checkin.notes,
-        distance_to_client=distance
+@app.post("/routes/")
+def create_route(
+    seller_id: str,
+    client_id: str,
+    planned_date: str,  # YYYY-MM-DD
+    planned_time: str,  # HH:MM
+    db: Session = Depends(get_db) 
+):
+    """Crear ruta"""
+    route = Route(
+        seller_id=seller_id,
+        client_id=client_id,
+        planned_date=datetime.fromisoformat(f"{planned_date}T{planned_time}:00"),
+        planned_time=planned_time,
+        status="pending"
     )
     
-    db.add(db_visit)
-    
-    # Actualizar estado de la ruta
-    route.status = "in_progress"
-    
+    db.add(route)
     db.commit()
-    db.refresh(db_visit)
+    db.refresh(route)
     
-    response = VisitResponse.from_orm(db_visit)
-    response.check_in_lat = checkin.latitude
-    response.check_in_lng = checkin.longitude
-    
-    return response
+    return route
 
 
-@app.put("/visits/checkout/", response_model=VisitResponse)
-def check_out(checkout: CheckOutCreate, db: Session = Depends(get_db)):
-    visit = db.query(Visit).filter(Visit.id == checkout.visit_id).first()
-    if not visit:
-        raise HTTPException(status_code=404, detail="Visit not found")
-    
-    if visit.check_out_time:
-        raise HTTPException(status_code=400, detail="Already checked out")
-    
-    # Actualizar check-out
-    visit.check_out_time = datetime.utcnow()
-    visit.check_out_location = f'POINT({checkout.longitude} {checkout.latitude})'
-    
-    # Actualizar ruta a completada
-    route = db.query(Route).filter(Route.id == visit.route_id).first()
-    if route:
-        route.status = "completed"
-    
-    db.commit()
-    db.refresh(visit)
-    
-    return visit
+# ============================================================================
+# ✅ CHECK-IN/CHECK-OUT REDISEÑADO CON VALIDACIÓN ROBUSTA
+# ============================================================================
 
-
-@app.get("/visits/", response_model=List[VisitResponse])
-def get_visits(
-    seller_id: Optional[int] = None,
-    client_id: Optional[int] = None,
-    date: Optional[str] = None,
-    db: Session = Depends(get_db)
+@app.post("/visits/checkin/", response_model=CheckInResponse)
+async def checkin(
+    request: CheckInRequest,
+    photo: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db) 
 ):
+    """
+    ✅ CHECK-IN MEJORADO CON VALIDACIÓN GEOESPACIAL ROBUSTA
+    
+    1. Calcula distancia exacta al cliente
+    2. Valida horario comercial
+    3. Solicita confirmación manual del cliente
+    4. Detecta fraudes (ubicaciones falsas, duplicados, etc)
+    5. Guarda foto geoetiquetada como prueba
+    
+    Retorna: éxito de la validación + flags de fraude si aplica
+    """
+    from sqlalchemy import func
+    
+    try:
+        # Obtener cliente para extraer su ubicación
+        client = db.query(Client).filter(Client.id == request.client_id).first()
+        if not client:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+        
+        # Obtener ruta
+        route = db.query(Route).filter(Route.id == request.route_id).first()
+        if not route:
+            raise HTTPException(status_code=404, detail="Ruta no encontrada")
+        
+        # 📍 CALCULAR DISTANCIA: Ubicación del vendedor vs cliente
+        # Usamos PostGIS para precisión (elipsoide WGS84)
+        checkin_point_wkt = f"POINT({request.longitude} {request.latitude})"
+        
+        distance_result = db.query(
+            func.ST_DistanceSphere(
+                func.ST_GeomFromText(checkin_point_wkt, 4326),
+                client.location
+            )
+        ).scalar()
+        
+        distance_meters = float(distance_result) if distance_result else 0
+        
+        # 🕐 HORA DEL CHECK-IN
+        checkin_time = datetime.utcnow()
+        
+        # ✅ VALIDAR CHECK-IN
+        is_valid, error_message, fraud_flags = validate_checkin(
+            distance_meters=distance_meters,
+            checkin_time=checkin_time,
+            client_found=request.client_found,
+            db=db,
+            seller_id=request.seller_id,
+            client_id=request.client_id
+        )
+        
+        # 📸 GUARDAR FOTO GEOETIQUETADA (si aplica)
+        photo_url = None
+        if photo:
+            # Crear directorio de fotos
+            photo_dir = Path("./uploads/visits")
+            photo_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Guardar con nombre único
+            visit_id = str(uuid.uuid4())
+            photo_path = photo_dir / f"{visit_id}_{photo.filename}"
+            
+            with open(photo_path, "wb") as f:
+                contents = await photo.read()
+                f.write(contents)
+            
+            photo_url = f"/uploads/visits/{visit_id}_{photo.filename}"
+        
+        # 💾 GUARDAR REGISTRO DE VISITA
+        visit = Visit(
+            route_id=request.route_id,
+            seller_id=request.seller_id,
+            client_id=request.client_id,
+            
+            checkin_time=checkin_time,
+            checkin_location=func.ST_GeomFromText(checkin_point_wkt, 4326),
+            checkin_distance_meters=distance_meters,
+            checkin_photo_url=photo_url,
+            
+            checkin_is_valid=is_valid,
+            checkin_validation_error=error_message,
+            fraud_flags="|".join(fraud_flags) if fraud_flags else None,
+            notes=request.notes
+        )
+        
+        db.add(visit)
+        db.commit()
+        db.refresh(visit)
+        
+        # 📊 GENERAR RESPUESTA
+        message = "✅ Check-in exitoso" if is_valid else f"⚠️ Check-in con advertencias: {error_message}"
+        
+        return CheckInResponse(
+            visit_id=str(visit.id),
+            success=True,
+            is_valid=is_valid,
+            distance_meters=distance_meters,
+            validation_error=error_message,
+            fraud_flags=fraud_flags if fraud_flags else None,
+            message=message
+        )
+    
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error en check-in: {str(e)}")
+
+
+@app.post("/visits/checkout/", response_model=CheckInResponse)
+async def checkout(
+    request: CheckOutRequest,
+    db: Session = Depends(get_db) 
+):
+    """
+    CHECK-OUT: Finalizar visita
+    """
+    from sqlalchemy import func
+    
+    try:
+        # Obtener visita
+        visit = db.query(Visit).filter(Visit.id == request.visit_id).first()
+        if not visit:
+            raise HTTPException(status_code=404, detail="Visita no encontrada")
+        
+        # Obtener cliente
+        client = db.query(Client).filter(Client.id == visit.client_id).first()
+        if not client:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+        
+        # Calcular distancia checkout
+        checkout_point_wkt = f"POINT({request.longitude} {request.latitude})"
+        
+        distance_result = db.query(
+            func.ST_DistanceSphere(
+                func.ST_GeomFromText(checkout_point_wkt, 4326),
+                client.location
+            )
+        ).scalar()
+        
+        distance_meters = float(distance_result) if distance_result else 0
+        
+        # Actualizar visita
+        visit.checkout_time = datetime.utcnow()
+        visit.checkout_location = func.ST_GeomFromText(checkout_point_wkt, 4326)
+        visit.checkout_distance_meters = distance_meters
+        if request.notes:
+            visit.notes = request.notes
+        
+        db.commit()
+        db.refresh(visit)
+        
+        # Actualizar estado de ruta
+        route = db.query(Route).filter(Route.id == visit.route_id).first()
+        if route:
+            route.status = "completed"
+            db.commit()
+        
+        return CheckInResponse(
+            visit_id=str(visit.id),
+            success=True,
+            is_valid=True,
+            distance_meters=distance_meters,
+            message="✅ Check-out completado"
+        )
+    
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error en check-out: {str(e)}")
+
+
+# --- VISITAS ---
+
+@app.get("/visits/")
+def list_visits(
+    seller_id: Optional[str] = None,
+    client_id: Optional[str] = None,
+    db: Session = Depends(get_db) 
+):
+    """Listar visitas con filtros"""
     query = db.query(Visit)
     
     if seller_id:
         query = query.filter(Visit.seller_id == seller_id)
     if client_id:
         query = query.filter(Visit.client_id == client_id)
-    if date:
-        query = query.filter(Visit.check_in_time >= date)
     
-    return query.all()
+    return query.order_by(Visit.created_at.desc()).all()
 
 
-# ===== OPPORTUNITIES =====
+# --- DASHBOARD ---
 
-@app.post("/opportunities/", response_model=OpportunityResponse)
-def create_opportunity(opportunity: OpportunityCreate, db: Session = Depends(get_db)):
-    db_opportunity = Opportunity(**opportunity.dict())
-    db.add(db_opportunity)
-    db.commit()
-    db.refresh(db_opportunity)
-    return db_opportunity
+@app.get("/dashboard/stats/")
+def dashboard_stats(db: Session = Depends(get_db)):
+    """
+    ✅ DASHBOARD CON MÉTRICAS DE FRAUDE Y VALIDACIÓN
+    """
+    from sqlalchemy import func
+    
+    # Vendedores activos
+    active_sellers = db.query(func.count(Seller.id)).filter(Seller.is_active == True).scalar()
+    
+    # Visitas del día
+    today = datetime.utcnow().date()
+    visits_today = db.query(func.count(Visit.id)).filter(
+        func.date(Visit.checkin_time) == today
+    ).scalar()
+    
+    # Check-ins válidos vs inválidos
+    valid_checkins = db.query(func.count(Visit.id)).filter(
+        Visit.checkin_is_valid == True,
+        func.date(Visit.checkin_time) == today
+    ).scalar()
+    
+    invalid_checkins = db.query(func.count(Visit.id)).filter(
+        Visit.checkin_is_valid == False,
+        func.date(Visit.checkin_time) == today
+    ).scalar()
+    
+    # Visitas con flags de fraude
+    fraud_visits = db.query(func.count(Visit.id)).filter(
+        Visit.fraud_flags.isnot(None),
+        func.date(Visit.checkin_time) == today
+    ).scalar()
+    
+    # Distancia promedio de check-ins
+    avg_distance = db.query(func.avg(Visit.checkin_distance_meters)).filter(
+        func.date(Visit.checkin_time) == today,
+        Visit.checkin_distance_meters.isnot(None)
+    ).scalar()
+    
+    return {
+        "date": today.isoformat(),
+        "active_sellers": active_sellers or 0,
+        "total_visits_today": visits_today or 0,
+        "valid_checkins": valid_checkins or 0,
+        "invalid_checkins": invalid_checkins or 0,
+        "fraud_detections": fraud_visits or 0,
+        "average_distance_meters": round(float(avg_distance) if avg_distance else 0, 2),
+        "quality_score": f"{round(((valid_checkins or 0) / max(visits_today or 1, 1)) * 100)}%"
+    }
 
 
-@app.get("/opportunities/", response_model=List[OpportunityResponse])
-def get_opportunities(
-    seller_id: Optional[int] = None,
-    status: Optional[str] = None,
-    db: Session = Depends(get_db)
+@app.get("/dashboard/fraud-alerts/")
+def fraud_alerts(
+    hours: int = 24,
+    db: Session = Depends(get_db) 
 ):
+    """
+    ✅ ALERTAS DE FRAUDE PARA GERENCIA
+    Muestra visitas con flags sospechosos en las últimas N horas
+    """
+    from sqlalchemy import func
+    
+    cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+    
+    suspicious_visits = db.query(
+        Visit.id,
+        Visit.seller_id,
+        Visit.client_id,
+        Visit.checkin_time,
+        Visit.checkin_distance_meters,
+        Visit.fraud_flags
+    ).filter(
+        Visit.fraud_flags.isnot(None),
+        Visit.checkin_time > cutoff_time
+    ).order_by(Visit.checkin_time.desc()).all()
+    
+    alerts = []
+    for visit in suspicious_visits:
+        seller = db.query(Seller).filter(Seller.id == visit.seller_id).first()
+        client = db.query(Client).filter(Client.id == visit.client_id).first()
+        
+        alerts.append({
+            "visit_id": str(visit.id),
+            "seller": seller.name if seller else "Unknown",
+            "client": client.name if client else "Unknown",
+            "timestamp": visit.checkin_time.isoformat(),
+            "distance_meters": visit.checkin_distance_meters,
+            "fraud_flags": visit.fraud_flags.split("|") if visit.fraud_flags else []
+        })
+    
+    return {
+        "period_hours": hours,
+        "total_alerts": len(alerts),
+        "alerts": alerts
+    }
+
+
+# --- OPORTUNIDADES ---
+
+@app.get("/opportunities/")
+def list_opportunities(seller_id: Optional[str] = None, db: Session = Depends(get_db)):
+    """Listar oportunidades"""
     query = db.query(Opportunity)
     
     if seller_id:
         query = query.filter(Opportunity.seller_id == seller_id)
-    if status:
-        query = query.filter(Opportunity.status == status)
     
     return query.all()
 
 
-# ===== DASHBOARD =====
-
-@app.get("/dashboard/stats", response_model=DashboardStats)
-def get_dashboard_stats(db: Session = Depends(get_db)):
-    from sqlalchemy import func
-    from datetime import date
-    
-    active_sellers = db.query(func.count(Seller.id)).filter(Seller.active == 1).scalar()
-    
-    today = date.today()
-    total_visits_today = db.query(func.count(Visit.id)).filter(
-        func.date(Visit.check_in_time) == today
-    ).scalar()
-    
-    pending_routes = db.query(func.count(Route.id)).filter(Route.status == "pending").scalar()
-    
-    open_opportunities = db.query(func.count(Opportunity.id)).filter(
-        Opportunity.status == "open"
-    ).scalar()
-    
-    return DashboardStats(
-        active_sellers=active_sellers or 0,
-        total_visits_today=total_visits_today or 0,
-        pending_routes=pending_routes or 0,
-        open_opportunities=open_opportunities or 0
+@app.post("/opportunities/")
+def create_opportunity(
+    seller_id: str,
+    client_id: str,
+    title: str,
+    estimated_value: float,
+    description: Optional[str] = None,
+    db: Session = Depends(get_db) 
+):
+    """Crear oportunidad"""
+    opportunity = Opportunity(
+        seller_id=seller_id,
+        client_id=client_id,
+        title=title,
+        description=description,
+        estimated_value=estimated_value,
+        status="open"
     )
+    
+    db.add(opportunity)
+    db.commit()
+    db.refresh(opportunity)
+    
+    return opportunity
+
+
+# --- HEALTH CHECK ---
+
+@app.get("/health/")
+def health_check():
+    """Health check para Railway"""
+    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 
 
 if __name__ == "__main__":

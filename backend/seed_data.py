@@ -16,27 +16,27 @@ def seed_database():
         
         clients = [
             Client(
-                name="Carpintería Valencia",
-                address="Av. del Puerto 245, Valencia",
-                phone="963123456",
-                email="info@carpivalencia.com",
-                location='POINT(-0.3763 39.4699)',
+                name="Cristalum Gandia",
+                address="C. del Lector Romero, 8, 46702 Gandia, Valencia",
+                phone="961953754",
+                email="info@cristalumgandia.info",
+                location='POINT(38.960107688053455 -0.1876011040296285)',
                 status="active"
             ),
             Client(
-                name="Aluminis Gandia",
-                address="Calle Mayor 89, Gandia",
-                phone="962456789",
-                email="contacto@aluminisgandia.com",
-                location='POINT(-0.1828 38.9672)',
+                name="Aluminguez SL",
+                address="c/ Primero de Mayo, 12 Pol. Ind. Les Pedreres, 03610 Petrer, Alicante",
+                phone="965376478",
+                email="info@aluminguez.com",
+                location='POINT(38.50622908918234 -0.7911363828664167)',
                 status="active"
             ),
             Client(
-                name="Perfiles Alzira",
-                address="Industrial Nord, Alzira",
-                phone="962789012",
-                email="alzira@perfiles.com",
-                location='POINT(-0.4351 39.1521)',
+                name="MetalGlass Aluminio y Cristal SL",
+                address="C. Zurita, 8, 03630 Sax, Alicante",
+                phone="636740677",
+                email="metalglass@metalglass.es",
+                location='POINT(38.54765471839225 -0.8162404364787462)',
                 status="active"
             ),
         ]
