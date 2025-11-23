@@ -153,6 +153,14 @@
       <div v-if="activeTab === 'checkin'" class="space-y-6 max-w-2xl mx-auto">
         <h2 class="text-2xl font-bold text-gray-800">📍 Check-in del Cliente</h2>
 
+        <!-- MENSAJE DE VENDEDOR ACTUAL -->
+        <div v-if="currentUser" class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+          <p class="text-blue-800 font-semibold">
+            👤 Operador: <span class="text-blue-600">{{ currentUser.name }}</span>
+          </p>
+          <p class="text-blue-700 text-sm">ID: {{ currentUser.id }}</p>
+        </div>
+
         <!-- FORMULARIO CHECK-IN -->
         <div class="bg-white rounded-lg shadow-lg p-8 space-y-6">
           
@@ -161,13 +169,23 @@
             <label class="block text-gray-700 font-bold mb-2">Ruta Programada</label>
             <select 
               v-model="checkinForm.route_id"
+              @change="onRouteChanged"
               class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-600"
             >
               <option value="">Seleccionar ruta...</option>
               <option v-for="route in routes" :key="route.id" :value="route.id">
-                {{ route.client_name }} - {{ route.planned_time }}
+                {{ route.client?.name || 'Cliente' }} - {{ route.planned_time }}
               </option>
             </select>
+          </div>
+
+          <!-- INFO DE RUTA SELECCIONADA -->
+          <div v-if="selectedRoute" class="bg-indigo-50 border-l-4 border-indigo-500 p-4 rounded">
+            <p class="text-indigo-900 font-semibold">
+              📍 Cliente: <span class="text-indigo-600">{{ selectedRoute.client?.name }}</span>
+            </p>
+            <p class="text-indigo-700 text-sm">Tipo: {{ selectedRoute.client?.client_type }}</p>
+            <p class="text-indigo-700 text-sm">Dirección: {{ selectedRoute.client?.address }}</p>
           </div>
 
           <!-- UBICACIÓN GPS -->
@@ -207,154 +225,64 @@
             </div>
           </div>
 
-          <!-- FOTO GEOETIQUETADA (Prueba Visual) -->
-          <div class="bg-purple-50 border-2 border-purple-200 rounded-lg p-6 space-y-4">
-            <h3 class="font-bold text-purple-900 flex items-center gap-2">
-              📸 Foto Geoetiquetada (Prueba Visual)
-            </h3>
-            
-            <input 
-              type="file" 
-              accept="image/*"
-              @change="selectPhoto"
-              class="w-full px-4 py-2 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-600"
-            />
-
-            <div v-if="photoPreview" class="text-center">
-              <img :src="photoPreview" alt="preview" class="max-w-xs mx-auto rounded-lg shadow">
-              <p class="text-sm text-gray-600 mt-2">📸 Foto seleccionada</p>
-            </div>
-          </div>
-
-          <!-- CONFIRMACIÓN MANUAL (Anti-fraude) -->
+          <!-- CONFIRMACIÓN MANUAL -->
           <div class="bg-green-50 border-2 border-green-200 rounded-lg p-6 space-y-4">
-            <h3 class="font-bold text-green-900 flex items-center gap-2">
-              ✅ Confirmación del Cliente
+            <h3 class="font-bold text-green-900">
+              ✅ ¿Cliente Confirmado?
             </h3>
-            <p class="text-sm text-green-800">
-              Por favor, confirma que el cliente se encuentra en la ubicación indicada
-            </p>
-            
             <div class="flex gap-4">
               <label class="flex items-center gap-2 cursor-pointer">
                 <input 
                   type="radio" 
-                  v-model="checkinForm.client_found"
+                  v-model="checkinForm.client_found" 
                   :value="true"
                   class="w-4 h-4"
                 />
-                <span class="text-gray-700 font-semibold">✅ Sí, cliente ubicado</span>
+                <span class="text-green-700 font-semibold">Sí, cliente encontrado</span>
               </label>
-              
               <label class="flex items-center gap-2 cursor-pointer">
                 <input 
                   type="radio" 
-                  v-model="checkinForm.client_found"
+                  v-model="checkinForm.client_found" 
                   :value="false"
                   class="w-4 h-4"
                 />
-                <span class="text-gray-700 font-semibold">❌ No, cliente no encontrado</span>
+                <span class="text-red-700 font-semibold">No, cliente no encontrado</span>
               </label>
             </div>
           </div>
 
-          <!-- NOTAS ADICIONALES -->
+          <!-- NOTAS -->
           <div>
             <label class="block text-gray-700 font-bold mb-2">Notas (Opcional)</label>
             <textarea 
               v-model="checkinForm.notes"
-              placeholder="Ej: Cliente fuera de oficina, dejar en recepción..."
-              class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-600 resize-none"
+              class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-600"
               rows="3"
+              placeholder="Observaciones sobre la visita..."
             />
           </div>
 
-          <!-- BOTÓN ENVIAR CHECK-IN -->
+          <!-- BOTÓN SUBMIT -->
           <button 
             @click="submitCheckin"
-            :disabled="!canSubmitCheckin"
-            class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-bold py-4 px-6 rounded-lg transition-colors text-lg flex items-center justify-center gap-2"
+            :disabled="!canSubmitCheckin || submittingCheckin"
+            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-4 rounded-lg transition-colors disabled:opacity-50 text-lg flex items-center justify-center gap-2"
           >
-            {{ submittingCheckin ? '⏳ Enviando...' : '🚀 Registrar Check-in' }}
+            {{ submittingCheckin ? '⏳ Registrando...' : '✅ Confirmar Check-in' }}
           </button>
-        </div>
 
-        <!-- RESULTADO CHECK-IN -->
-        <div v-if="checkinResult" :class="[
-          'rounded-lg p-6 border-l-4',
-          checkinResult.success ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'
-        ]">
-          <h3 class="font-bold text-lg mb-4">
-            {{ checkinResult.success ? '✅ Check-in Registrado' : '❌ Error en Check-in' }}
-          </h3>
-          
-          <div class="space-y-2 text-sm">
-            <p v-if="checkinResult.distance_meters">
-              <span class="font-semibold">Distancia al cliente:</span>
-              <span class="font-mono">{{ checkinResult.distance_meters.toFixed(1) }}m</span>
-            </p>
-            
-            <p v-if="checkinResult.is_valid" class="text-green-700 font-semibold">
-              ✅ Ubicación válida (dentro de 100m)
-            </p>
-            
-            <p v-if="!checkinResult.is_valid && checkinResult.validation_error" class="text-red-700 font-semibold">
-              ⚠️ {{ checkinResult.validation_error }}
-            </p>
-            
-            <div v-if="checkinResult.fraud_flags && checkinResult.fraud_flags.length > 0">
-              <p class="font-semibold text-orange-700">Flags detectados:</p>
-              <div class="flex flex-wrap gap-2 mt-2">
-                <span 
-                  v-for="flag in checkinResult.fraud_flags" 
-                  :key="flag"
-                  class="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-mono"
-                >
-                  {{ flag }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 4️⃣ TAB: RUTAS Y VISITAS -->
-      <div v-if="activeTab === 'routes'" class="space-y-6">
-        <h2 class="text-2xl font-bold text-gray-800">📋 Rutas y Visitas</h2>
-        
-        <div class="bg-white rounded-lg shadow-md overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead class="bg-indigo-600 text-white">
-                <tr>
-                  <th class="px-6 py-3 text-left">Cliente</th>
-                  <th class="px-6 py-3 text-left">Fecha Programada</th>
-                  <th class="px-6 py-3 text-left">Estado</th>
-                  <th class="px-6 py-3 text-left">Check-in</th>
-                  <th class="px-6 py-3 text-left">Distancia</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="route in routes" :key="route.id" class="border-b border-gray-200">
-                  <td class="px-6 py-4 font-semibold text-gray-900">{{ route.client_name }}</td>
-                  <td class="px-6 py-4 text-gray-700">{{ formatDate(route.planned_date) }}</td>
-                  <td class="px-6 py-4">
-                    <span :class="[
-                      'px-3 py-1 rounded-full text-xs font-bold',
-                      route.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                    ]">
-                      {{ route.status === 'completed' ? '✅ Completada' : '⏳ Pendiente' }}
-                    </span>
-                  </td>
-                  <td class="px-6 py-4">
-                    {{ route.checkin_time ? formatTime(route.checkin_time) : '-' }}
-                  </td>
-                  <td class="px-6 py-4 font-mono">
-                    {{ route.distance ? `${route.distance.toFixed(0)}m` : '-' }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <!-- RESULTADO -->
+          <div 
+            v-if="checkinResult"
+            :class="[
+              'p-6 rounded-lg font-semibold',
+              checkinResult.success 
+                ? 'bg-green-100 text-green-800 border-2 border-green-500' 
+                : 'bg-red-100 text-red-800 border-2 border-red-500'
+            ]"
+          >
+            {{ checkinResult.success ? '✅' : '❌' }} {{ checkinResult.message }}
           </div>
         </div>
       </div>
@@ -365,55 +293,52 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 
-// STATE
+const API_URL = 'http://localhost:8000'
+
+// ============================================================================
+// ESTADO REACTIVO
+// ============================================================================
+
 const activeTab = ref('dashboard')
-const currentUser = ref({ name: 'Jose Manuel' })
 const currentTime = ref('')
+const currentUser = ref(null)
+const sellers = ref([])
+
+const stats = ref({
+  total_visits_today: 0,
+  valid_checkins: 0,
+  invalid_checkins: 0,
+  fraud_detections: 0,
+  quality_score: '0%',
+  average_distance_meters: 0
+})
+
+const fraudAlerts = ref([])
+const routes = ref([])
 const currentLocation = ref(null)
 const loadingLocation = ref(false)
-const selectedPhoto = ref(null)
-const photoPreview = ref(null)
 const submittingCheckin = ref(false)
+const checkinResult = ref(null)
+const selectedRoute = ref(null)
 
-// FORMULARIO CHECK-IN
+const tabs = [
+  { id: 'dashboard', name: 'Dashboard', icon: '📊' },
+  { id: 'fraud-alerts', name: 'Alertas', icon: '🚨' },
+  { id: 'checkin', name: 'Check-in', icon: '📍' }
+]
+
 const checkinForm = ref({
   route_id: '',
-  seller_id: 'seller-1',
-  client_id: '',
+  seller_id: '', // Se setea automáticamente desde currentUser
+  client_id: '', // Se setea automáticamente al seleccionar ruta
   latitude: null,
   longitude: null,
   client_found: null,
   notes: ''
 })
 
-const checkinResult = ref(null)
-
-// DATOS DESDE API
-const stats = ref({
-  total_visits_today: 0,
-  valid_checkins: 0,
-  invalid_checkins: 0,
-  fraud_detections: 0,
-  average_distance_meters: 0,
-  quality_score: '0%'
-})
-
-const fraudAlerts = ref([])
-const routes = ref([])
-
-// TABS
-const tabs = [
-  { id: 'dashboard', name: 'Dashboard', icon: '📊' },
-  { id: 'fraud-alerts', name: 'Alertas', icon: '🚨' },
-  { id: 'checkin', name: 'Check-in', icon: '📍' },
-  { id: 'routes', name: 'Rutas', icon: '📋' }
-]
-
-// CONFIG API
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
 // ============================================================================
-// FUNCIONES AUXILIARES
+// UTILIDADES
 // ============================================================================
 
 const formatTime = (timestamp) => {
@@ -428,7 +353,6 @@ const formatDate = (timestamp) => {
   return date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-// Actualizar hora actual
 const updateTime = () => {
   const now = new Date()
   currentTime.value = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -474,19 +398,20 @@ const captureLocation = () => {
 }
 
 // ============================================================================
-// FOTO
+// MANEJO DE RUTAS
 // ============================================================================
 
-const selectPhoto = (event) => {
-  const file = event.target.files?.[0]
-  if (!file) return
-
-  selectedPhoto.value = file
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    photoPreview.value = e.target.result
+const onRouteChanged = () => {
+  const routeId = checkinForm.value.route_id
+  const route = routes.value.find(r => r.id === routeId)
+  
+  if (route) {
+    selectedRoute.value = route
+    checkinForm.value.client_id = route.client_id
+  } else {
+    selectedRoute.value = null
+    checkinForm.value.client_id = ''
   }
-  reader.readAsDataURL(file)
 }
 
 // ============================================================================
@@ -497,7 +422,9 @@ const canSubmitCheckin = computed(() => {
   return (
     checkinForm.value.route_id &&
     currentLocation.value &&
-    checkinForm.value.client_found !== null
+    checkinForm.value.client_found !== null &&
+    checkinForm.value.seller_id && // UUID válido del vendedor
+    checkinForm.value.client_id    // UUID válido del cliente
   )
 })
 
@@ -507,24 +434,22 @@ const submitCheckin = async () => {
   submittingCheckin.value = true
   
   try {
-    const formData = new FormData()
-    formData.append('request', JSON.stringify({
+    const payload = {
       route_id: checkinForm.value.route_id,
       seller_id: checkinForm.value.seller_id,
-      client_id: 'client-1', // Extraer desde ruta seleccionada
+      client_id: checkinForm.value.client_id,
       latitude: checkinForm.value.latitude,
       longitude: checkinForm.value.longitude,
       client_found: checkinForm.value.client_found,
       notes: checkinForm.value.notes
-    }))
-    
-    if (selectedPhoto.value) {
-      formData.append('photo', selectedPhoto.value)
     }
 
     const response = await fetch(`${API_URL}/visits/checkin/`, {
       method: 'POST',
-      body: formData
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
     })
 
     const data = await response.json()
@@ -532,28 +457,34 @@ const submitCheckin = async () => {
     if (response.ok) {
       checkinResult.value = {
         ...data,
-        success: true
+        success: true,
+        message: '✅ Check-in registrado correctamente'
       }
       
-      // Limpiar formulario
+      // Limpiar formulario después de 2 segundos
       setTimeout(() => {
         checkinForm.value = {
           route_id: '',
-          seller_id: 'seller-1',
+          seller_id: currentUser.value?.id || '',
           client_id: '',
           latitude: null,
           longitude: null,
           client_found: null,
           notes: ''
         }
-        selectedPhoto.value = null
-        photoPreview.value = null
         currentLocation.value = null
+        selectedRoute.value = null
+        checkinResult.value = null
+        
+        // Recargar datos
+        loadDashboard()
+        loadFraudAlerts()
+        loadRoutes()
       }, 2000)
     } else {
       checkinResult.value = {
         success: false,
-        message: data.detail || 'Error en check-in'
+        message: `❌ Error: ${data.detail || 'Error en check-in'}`
       }
     }
   } catch (error) {
@@ -571,6 +502,30 @@ const submitCheckin = async () => {
 // CARGAR DATOS INICIALES
 // ============================================================================
 
+const loadSellers = async () => {
+  try {
+    const response = await fetch(`${API_URL}/sellers/`)
+    
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}: No se pudieron cargar los vendedores`)
+    }
+    
+    const data = await response.json()
+    sellers.value = data
+    
+    // Usar el primer vendedor como vendedor actual
+    if (data.length > 0) {
+      currentUser.value = data[0]
+      checkinForm.value.seller_id = data[0].id
+      console.log(`✅ Vendedor actual: ${data[0].name} (${data[0].id})`)
+    } else {
+      console.error('⚠️ No hay vendedores disponibles')
+    }
+  } catch (error) {
+    console.error('❌ Error cargando vendedores:', error)
+  }
+}
+
 const loadDashboard = async () => {
   try {
     const response = await fetch(`${API_URL}/dashboard/stats/`)
@@ -585,7 +540,7 @@ const loadFraudAlerts = async () => {
   try {
     const response = await fetch(`${API_URL}/dashboard/fraud-alerts/?hours=24`)
     const data = await response.json()
-    fraudAlerts.value = data.alerts
+    fraudAlerts.value = data.alerts || []
   } catch (error) {
     console.error('Error cargando alertas:', error)
   }
@@ -593,11 +548,23 @@ const loadFraudAlerts = async () => {
 
 const loadRoutes = async () => {
   try {
-    const response = await fetch(`${API_URL}/routes/?seller_id=seller-1`)
+    if (!currentUser.value?.id) {
+      console.warn('⚠️ Sin vendedor actual, esperando...')
+      return
+    }
+    
+    // ✅ USAR UUID VÁLIDO DEL VENDEDOR
+    const response = await fetch(`${API_URL}/routes/?seller_id=${currentUser.value.id}`)
+    
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}: No se pudieron cargar las rutas`)
+    }
+    
     const data = await response.json()
-    routes.value = data
+    routes.value = data || []
+    console.log(`✅ Rutas cargadas para ${currentUser.value.name}: ${data.length} rutas`)
   } catch (error) {
-    console.error('Error cargando rutas:', error)
+    console.error('❌ Error cargando rutas:', error)
   }
 }
 
@@ -605,17 +572,26 @@ const loadRoutes = async () => {
 // LIFECYCLE
 // ============================================================================
 
-onMounted(() => {
+onMounted(async () => {
   updateTime()
   setInterval(updateTime, 1000)
   
+  // 1️⃣ PRIMERO: Cargar vendedores (obtiene UUIDs reales)
+  await loadSellers()
+  
+  // 2️⃣ DESPUÉS: Cargar rutas usando el UUID del vendedor
+  await loadRoutes()
+  
+  // 3️⃣ Cargar datos del dashboard
   loadDashboard()
   loadFraudAlerts()
-  loadRoutes()
   
   // Recargar datos cada 30 segundos
-  setInterval(loadDashboard, 30000)
-  setInterval(loadFraudAlerts, 30000)
+  setInterval(async () => {
+    loadDashboard()
+    loadFraudAlerts()
+    await loadRoutes()
+  }, 30000)
 })
 </script>
 

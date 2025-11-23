@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, Enum, create_engine, text
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, Enum, create_engine, text, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship, sessionmaker
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -93,8 +93,8 @@ class Route(Base):
     __tablename__ = "routes"
     
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    seller_id = Column(PG_UUID(as_uuid=True), nullable=False)
-    client_id = Column(PG_UUID(as_uuid=True), nullable=False)
+    seller_id = Column(PG_UUID(as_uuid=True), ForeignKey("sellers.id"), nullable=False)
+    client_id = Column(PG_UUID(as_uuid=True), ForeignKey("clients.id"), nullable=False)
     
     planned_date = Column(DateTime, nullable=False)
     planned_time = Column(String(5), nullable=False)  # HH:MM
@@ -112,9 +112,9 @@ class Visit(Base):
     __tablename__ = "visits"
     
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    route_id = Column(PG_UUID(as_uuid=True), nullable=False)
-    seller_id = Column(PG_UUID(as_uuid=True), nullable=False)
-    client_id = Column(PG_UUID(as_uuid=True), nullable=False)
+    route_id = Column(PG_UUID(as_uuid=True), ForeignKey("routes.id"), nullable=False)
+    seller_id = Column(PG_UUID(as_uuid=True), ForeignKey("sellers.id"), nullable=False)
+    client_id = Column(PG_UUID(as_uuid=True), ForeignKey("clients.id"), nullable=False)
     
     # ✅ CHECK-IN: Ubicación GPS capturada
     checkin_time = Column(DateTime, nullable=True)
@@ -147,8 +147,8 @@ class Opportunity(Base):
     __tablename__ = "opportunities"
     
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    seller_id = Column(PG_UUID(as_uuid=True), nullable=False)
-    client_id = Column(PG_UUID(as_uuid=True), nullable=False)
+    seller_id = Column(PG_UUID(as_uuid=True), ForeignKey("sellers.id"), nullable=False)
+    client_id = Column(PG_UUID(as_uuid=True), ForeignKey("clients.id"), nullable=False)
     
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
@@ -370,21 +370,41 @@ def create_seller(name: str, email: str, phone: str, db: Session = Depends(get_d
 
 @app.get("/clients/")
 def list_clients(db: Session = Depends(get_db)):
-    """Listar clientes"""
+    """Listar clientes con coordenadas convertidas a lat/lng"""
     from sqlalchemy import func
     
-    clients = db.query(
-        Client.id,
-        Client.name,
-        Client.address,
-        Client.phone,
-        Client.email,
-        Client.client_type,
-        Client.status,
-        func.ST_AsText(Client.location).label("location")
-    ).filter(Client.status == "active").all()
+    clients_db = db.query(Client).filter(Client.status == "active").all()
     
-    return clients
+    result = []
+    for client in clients_db:
+        try:
+            # Convertir Geography a WKT: "POINT(-0.187 38.960)"
+            coords_wkt = db.query(func.ST_AsText(client.location)).scalar()
+            
+            if coords_wkt and coords_wkt.startswith("POINT"):
+                # Parse "POINT(lng lat)"
+                coords_str = coords_wkt.replace("POINT(", "").replace(")", "")
+                lng, lat = map(float, coords_str.split())
+            else:
+                lng, lat = None, None
+            
+            result.append({
+                "id": str(client.id),
+                "name": client.name,
+                "address": client.address,
+                "phone": client.phone,
+                "email": client.email,
+                "client_type": client.client_type,
+                "status": client.status,
+                "latitude": lat,
+                "longitude": lng,
+                "created_at": client.created_at.isoformat() if client.created_at else None
+            })
+        except Exception as e:
+            print(f"⚠️ Error procesando cliente {client.id}: {str(e)}")
+            continue
+    
+    return result
 
 
 @app.post("/clients/")
@@ -434,12 +454,12 @@ def nearby_clients(
     Buscar clientes cercanos usando PostGIS
     ST_DWithin = búsqueda por distancia en geografia
     """
-    from sqlalchemy import func, text
+    from sqlalchemy import func
     
     radius_meters = radius_km * 1000
     point_wkt = f"POINT({longitude} {latitude})"
     
-    nearby = db.query(Client).filter(
+    nearby_db = db.query(Client).filter(
         func.ST_DWithin(
             Client.location,
             func.ST_GeomFromText(point_wkt, 4326),
@@ -447,7 +467,43 @@ def nearby_clients(
         )
     ).all()
     
-    return nearby
+    result = []
+    for client in nearby_db:
+        try:
+            coords_wkt = db.query(func.ST_AsText(client.location)).scalar()
+            
+            if coords_wkt and coords_wkt.startswith("POINT"):
+                coords_str = coords_wkt.replace("POINT(", "").replace(")", "")
+                lng, lat = map(float, coords_str.split())
+                
+                # Calcular distancia
+                distance = db.query(
+                    func.ST_DistanceSphere(
+                        func.ST_GeomFromText(point_wkt, 4326),
+                        client.location
+                    )
+                ).scalar()
+            else:
+                lng, lat, distance = None, None, None
+            
+            result.append({
+                "id": str(client.id),
+                "name": client.name,
+                "address": client.address,
+                "phone": client.phone,
+                "email": client.email,
+                "client_type": client.client_type,
+                "status": client.status,
+                "latitude": lat,
+                "longitude": lng,
+                "distance_meters": float(distance) if distance else None,
+                "created_at": client.created_at.isoformat() if client.created_at else None
+            })
+        except Exception as e:
+            print(f"⚠️ Error procesando cliente cercano {client.id}: {str(e)}")
+            continue
+    
+    return result
 
 
 # --- RUTAS ---
@@ -462,7 +518,13 @@ def list_routes(
     query = db.query(Route)
     
     if seller_id:
-        query = query.filter(Route.seller_id == seller_id)
+        try:
+            # Validar que es UUID válido
+            seller_uuid = uuid.UUID(seller_id)
+            query = query.filter(Route.seller_id == seller_uuid)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"seller_id inválido: {seller_id}")
+    
     if status:
         query = query.filter(Route.status == status)
     
@@ -478,9 +540,15 @@ def create_route(
     db: Session = Depends(get_db)
 ):
     """Crear ruta"""
+    try:
+        seller_uuid = uuid.UUID(seller_id)
+        client_uuid = uuid.UUID(client_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"IDs inválidos: {str(e)}")
+    
     route = Route(
-        seller_id=seller_id,
-        client_id=client_id,
+        seller_id=seller_uuid,
+        client_id=client_uuid,
         planned_date=datetime.fromisoformat(f"{planned_date}T{planned_time}:00"),
         planned_time=planned_time,
         status="pending"
@@ -517,13 +585,21 @@ async def checkin(
     from sqlalchemy import func
     
     try:
+        # Validar que IDs sean UUIDs válidos
+        try:
+            route_id = uuid.UUID(request.route_id)
+            seller_id = uuid.UUID(request.seller_id)
+            client_id = uuid.UUID(request.client_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"IDs inválidos: {str(e)}")
+        
         # Obtener cliente para extraer su ubicación
-        client = db.query(Client).filter(Client.id == request.client_id).first()
+        client = db.query(Client).filter(Client.id == client_id).first()
         if not client:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
         
         # Obtener ruta
-        route = db.query(Route).filter(Route.id == request.route_id).first()
+        route = db.query(Route).filter(Route.id == route_id).first()
         if not route:
             raise HTTPException(status_code=404, detail="Ruta no encontrada")
         
@@ -549,8 +625,8 @@ async def checkin(
             checkin_time=checkin_time,
             client_found=request.client_found,
             db=db,
-            seller_id=request.seller_id,
-            client_id=request.client_id
+            seller_id=seller_id,
+            client_id=client_id
         )
         
         # 📸 GUARDAR FOTO GEOETIQUETADA (si aplica)
@@ -572,9 +648,9 @@ async def checkin(
         
         # 💾 GUARDAR REGISTRO DE VISITA
         visit = Visit(
-            route_id=request.route_id,
-            seller_id=request.seller_id,
-            client_id=request.client_id,
+            route_id=route_id,
+            seller_id=seller_id,
+            client_id=client_id,
             
             checkin_time=checkin_time,
             checkin_location=func.ST_GeomFromText(checkin_point_wkt, 4326),
@@ -683,9 +759,18 @@ def list_visits(
     query = db.query(Visit)
     
     if seller_id:
-        query = query.filter(Visit.seller_id == seller_id)
+        try:
+            seller_uuid = uuid.UUID(seller_id)
+            query = query.filter(Visit.seller_id == seller_uuid)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"seller_id inválido: {seller_id}")
+    
     if client_id:
-        query = query.filter(Visit.client_id == client_id)
+        try:
+            client_uuid = uuid.UUID(client_id)
+            query = query.filter(Visit.client_id == client_uuid)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"client_id inválido: {client_id}")
     
     return query.order_by(Visit.created_at.desc()).all()
 
@@ -797,7 +882,11 @@ def list_opportunities(seller_id: Optional[str] = None, db: Session = Depends(ge
     query = db.query(Opportunity)
     
     if seller_id:
-        query = query.filter(Opportunity.seller_id == seller_id)
+        try:
+            seller_uuid = uuid.UUID(seller_id)
+            query = query.filter(Opportunity.seller_id == seller_uuid)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"seller_id inválido: {seller_id}")
     
     return query.all()
 
@@ -812,9 +901,15 @@ def create_opportunity(
     db: Session = Depends(get_db)
 ):
     """Crear oportunidad"""
+    try:
+        seller_uuid = uuid.UUID(seller_id)
+        client_uuid = uuid.UUID(client_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"IDs inválidos: {str(e)}")
+    
     opportunity = Opportunity(
-        seller_id=seller_id,
-        client_id=client_id,
+        seller_id=seller_uuid,
+        client_id=client_uuid,
         title=title,
         description=description,
         estimated_value=estimated_value,
