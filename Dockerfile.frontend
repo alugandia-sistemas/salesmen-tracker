@@ -3,11 +3,16 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copiar package.json y package-lock.json
+# Copiar package.json (y package-lock.json si existe)
 COPY frontend/package*.json ./
 
-# Instalar dependencias
-RUN npm ci
+# 🔧 IMPORTANTE: Limpiar cache de npm
+# para evitar errores de dependencias opcionales en Alpine
+RUN npm cache clean --force
+
+# ✅ Usar npm install (no npm ci) para más flexibilidad
+# Instala incluso sin package-lock.json
+RUN npm install --legacy-peer-deps
 
 # Copiar código fuente
 COPY frontend/ .
@@ -26,8 +31,9 @@ RUN npm install -g serve
 # Copiar dist desde stage anterior
 COPY --from=builder /app/dist ./dist
 
-# Puerto por defecto
-EXPOSE 3000
+# ✅ PUERTO 5173 (consistente con Vite)
+EXPOSE 5173
 
-# Iniciar servidor con puerto dinámico de Railway
-CMD ["serve", "-s", "dist", "-l", "tcp://0.0.0.0:${PORT:-3000}"]
+# Iniciar servidor con puerto 5173
+CMD ["serve", "-s", "dist", "-l", "tcp://0.0.0.0:5173"]
+

@@ -100,14 +100,14 @@ def seed_database():
             Route(
                 seller_id=seller_ernesto.id,
                 client_id=client_cristalum.id,
-                planned_date=today,
+                planned_date=2025-11-25,
                 planned_time="10:00",
                 status="pending"
             ),
             Route(
                 seller_id=seller_ernesto.id,
                 client_id=client_aluminguez.id,
-                planned_date=today,
+                planned_date=2025-11-26,
                 planned_time="14:30",
                 status="pending"
             ),

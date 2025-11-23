@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # ============================================================
+  # 🗺️ POSTGIS (BASE DE DATOS CON SOPORTE GEOGRÁFICO)
+  # ============================================================
+  postgres:
+    # ✅ Usar imagen con PostGIS (no PostgreSQL normal)
+    image: postgis/postgis:15-3.3
+    
+    container_name: salesmen_tracker_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: salesmen_tracker
+    ports:
+      # 🔌 PUERTO LOCAL: 5433 (no conflictúa con PostgreSQL local en 5432)
+      # 🔌 PUERTO CONTENEDOR: 5432 (interno en Docker)
+      - "5433:5432"
+    volumes:
+      # Persistencia de datos
+      - postgres_data:/var/lib/postgresql/data
+      # Scripts de inicialización (habilita PostGIS automáticamente)
+      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # ============================================================
+  # 🔙 BACKEND (FASTAPI + POSTGIS)
+  # ============================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: salesmen_tracker_backend
+    ports:
+      - "8000:8000"
+    environment:
+      # ✅ Base de datos con PostGIS
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/salesmen_tracker"
+      # CORS para desarrollo
+      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000"
+      PORT: "8000"
+      # Logging
+      LOG_LEVEL: "info"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Hot reload en desarrollo
+      - ./backend:/app
+    # Comando con hot reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # ============================================================
+  # 🎨 FRONTEND (VITE + VUE.JS) - DESARROLLO
+  # ============================================================
+  frontend:
+    build:
+      context: .
+      # ✅ Usar Dockerfile.frontend.dev para desarrollo
+      # (instala vite y todas las dependencias dev)
+      dockerfile: Dockerfile.frontend.dev
+    container_name: salesmen_tracker_frontend
+    ports:
+      - "5173:5173"
+    environment:
+      # URL del backend (para desarrollo)
+      VITE_API_URL: "http://localhost:8000"
+      NODE_ENV: "development"
+      # Para que Vite escuche en red
+      VITE_HOST: "0.0.0.0"
+    depends_on:
+      - backend
+    volumes:
+      # Montar código fuente para hot reload
+      - ./frontend:/app
+      # ✅ IMPORTANTE: No montar node_modules del host
+      # para evitar conflictos entre sistemas operativos
+      - /app/node_modules
+    networks:
+      - app-network
+    restart: unless-stopped
+
+# ============================================================
+# VOLÚMENES (PERSISTENCIA DE DATOS)
+# ============================================================
+volumes:
+  postgres_data:
+    driver: local
+
+# ============================================================
+# REDES (COMUNICACIÓN ENTRE SERVICIOS)
+# ============================================================
+networks:
+  app-network:
+    driver: bridge
