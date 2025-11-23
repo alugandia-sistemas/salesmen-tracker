@@ -54,15 +54,15 @@
           </div>
 
           <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-            <p class="text-gray-600 text-sm font-semibold">✅ Check-ins Válidos</p>
-            <p class="text-4xl font-bold text-green-600 mt-2">{{ myStats.valid_checkins }}</p>
-            <p class="text-xs text-gray-500 mt-2">Dentro de rango</p>
+            <p class="text-gray-600 text-sm font-semibold">✅ Completadas</p>
+            <p class="text-4xl font-bold text-green-600 mt-2">{{ myStats.completed_visits }}</p>
+            <p class="text-xs text-gray-500 mt-2">Con check-in válido</p>
           </div>
 
           <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-orange-500">
-            <p class="text-gray-600 text-sm font-semibold">⚠️ Pendientes</p>
+            <p class="text-gray-600 text-sm font-semibold">⏳ Pendientes</p>
             <p class="text-4xl font-bold text-orange-600 mt-2">{{ myStats.pending_routes }}</p>
-            <p class="text-xs text-gray-500 mt-2">Rutas sin completar</p>
+            <p class="text-xs text-gray-500 mt-2">Por hacer hoy</p>
           </div>
         </div>
 
@@ -116,7 +116,8 @@
           <div 
             v-for="route in myRoutes" 
             :key="route.id"
-            class="bg-white rounded-lg shadow-md border-l-4 border-indigo-600 overflow-hidden hover:shadow-lg transition-shadow"
+            class="bg-white rounded-lg shadow-md border-l-4 transition-all"
+            :class="getRouteVisit(route.id) ? 'border-green-600' : 'border-indigo-600'"
           >
             <!-- HEADER DE RUTA -->
             <div 
@@ -131,14 +132,11 @@
                 </div>
               </div>
               <div class="text-right">
-                <span :class="[
-                  'px-3 py-1 rounded-full text-sm font-semibold',
-                  route.status === 'completed' ? 'bg-green-100 text-green-800' :
-                  route.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                  route.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                  'bg-gray-100 text-gray-800'
-                ]">
-                  {{ formatStatus(route.status) }}
+                <span v-if="getRouteVisit(route.id)" class="px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800">
+                  ✅ Check-in Realizado
+                </span>
+                <span v-else class="px-3 py-1 rounded-full text-sm font-semibold bg-orange-100 text-orange-800">
+                  ⏳ Pendiente
                 </span>
               </div>
             </div>
@@ -171,23 +169,32 @@
               <div v-if="getRouteVisit(route.id)" class="bg-green-50 rounded-lg p-4 border border-green-300">
                 <p class="text-green-800 font-semibold">✅ Check-in ya registrado</p>
                 <p class="text-green-700 text-sm mt-1">{{ formatTime(getRouteVisit(route.id).checkin_time) }}</p>
+                <div v-if="getRouteVisit(route.id).checkin_distance_meters" class="mt-3">
+                  <p class="text-green-700 text-sm">Distancia: {{ getRouteVisit(route.id).checkin_distance_meters.toFixed(0) }}m ✅</p>
+                </div>
               </div>
 
-              <!-- BOTÓN CHECK-IN -->
-              <button 
-                v-if="!getRouteVisit(route.id)"
-                @click="openCheckInModal(route)"
-                class="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 py-4 rounded-lg font-bold text-lg flex items-center justify-center gap-2 shadow-md"
-              >
-                ✅ Registrar Check-in Ahora
-              </button>
-              <button 
-                v-else
-                @click="openCheckOutModal(route)"
-                class="w-full bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white px-6 py-4 rounded-lg font-bold text-lg flex items-center justify-center gap-2 shadow-md"
-              >
-                🚪 Registrar Check-out
-              </button>
+              <!-- BOTÓN CHECK-IN O COMPLETAR -->
+              <div v-if="!getRouteVisit(route.id)" class="space-y-3">
+                <button 
+                  @click="openCheckInModal(route)"
+                  class="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 py-4 rounded-lg font-bold text-lg flex items-center justify-center gap-2 shadow-md"
+                >
+                  ✅ Registrar Llegada (Check-in)
+                </button>
+              </div>
+
+              <div v-else class="space-y-3">
+                <p class="text-gray-700 text-sm text-center">
+                  Ya registraste la llegada a este cliente.
+                </p>
+                <button 
+                  @click="completeRoute(route.id)"
+                  class="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2"
+                >
+                  🎉 Marcar como Completado
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -202,20 +209,19 @@
       @success="onCheckInSuccess"
     />
 
-    <!-- MODAL CHECK-OUT -->
-    <CheckOutModal 
-      v-if="showCheckOutModal"
-      :visit="selectedVisit"
-      @close="showCheckOutModal = false"
-      @success="onCheckOutSuccess"
-    />
+    <!-- NOTIFICACIÓN DE ÉXITO -->
+    <div 
+      v-if="showSuccessNotification"
+      class="fixed bottom-4 right-4 bg-green-100 border-2 border-green-500 text-green-800 px-6 py-4 rounded-lg shadow-lg font-semibold flex items-center gap-2"
+    >
+      ✅ {{ successMessage }}
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import CheckInModal from '../components/CheckInModal.vue'
-import CheckOutModal from '../components/CheckOutModal.vue'
 
 const API_URL = 'http://localhost:8000'
 
@@ -234,7 +240,7 @@ const tabs = [
 
 const myStats = ref({
   visits_today: 0,
-  valid_checkins: 0,
+  completed_visits: 0,
   pending_routes: 0
 })
 
@@ -242,9 +248,9 @@ const myRoutes = ref([])
 const allVisits = ref([])
 const expandedRoutes = ref({})
 const showCheckInModal = ref(false)
-const showCheckOutModal = ref(false)
 const selectedRoute = ref(null)
-const selectedVisit = ref(null)
+const showSuccessNotification = ref(false)
+const successMessage = ref('')
 
 // ============================================================================
 // COMPUTED
@@ -265,26 +271,10 @@ const formatTime = (timestamp) => {
   return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
 }
 
-const formatDate = (timestamp) => {
-  if (!timestamp) return '-'
-  const date = new Date(timestamp)
-  return date.toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
 const formatDateShort = (timestamp) => {
   if (!timestamp) return '-'
   const date = new Date(timestamp)
   return date.toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric' })
-}
-
-const formatStatus = (status) => {
-  const statuses = {
-    'pending': '⏳ Pendiente',
-    'in_progress': '▶️ En progreso',
-    'completed': '✅ Completado',
-    'cancelled': '❌ Cancelado'
-  }
-  return statuses[status] || status
 }
 
 const toggleRouteExpanded = (routeId) => {
@@ -300,11 +290,27 @@ const openCheckInModal = (route) => {
   showCheckInModal.value = true
 }
 
-const openCheckOutModal = (route) => {
-  const visit = getRouteVisit(route.id)
-  selectedVisit.value = visit
-  selectedRoute.value = route
-  showCheckOutModal.value = true
+const completeRoute = async (routeId) => {
+  try {
+    // Marcar ruta como completada
+    const response = await fetch(`${API_URL}/routes/${routeId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'completed' })
+    })
+
+    if (response.ok) {
+      showSuccessNotification.value = true
+      successMessage.value = '🎉 Ruta marcada como completada'
+      setTimeout(() => {
+        showSuccessNotification.value = false
+      }, 3000)
+      
+      await loadMyRoutes()
+    }
+  } catch (error) {
+    console.error('Error completando ruta:', error)
+  }
 }
 
 const updateTime = () => {
@@ -371,8 +377,8 @@ const loadMyVisits = async () => {
     
     myStats.value = {
       visits_today: visitasHoy.length,
-      valid_checkins: visitasHoy.filter(v => v.checkin_is_valid).length,
-      pending_routes: myRoutes.value.filter(r => r.status === 'pending').length
+      completed_visits: visitasHoy.filter(v => v.checkin_is_valid).length,
+      pending_routes: myRoutes.value.filter(r => !getRouteVisit(r.id)).length
     }
   } catch (error) {
     console.error('Error cargando visitas:', error)
@@ -381,11 +387,13 @@ const loadMyVisits = async () => {
 
 const onCheckInSuccess = () => {
   showCheckInModal.value = false
-  loadMyRoutes()
-}
-
-const onCheckOutSuccess = () => {
-  showCheckOutModal.value = false
+  showSuccessNotification.value = true
+  successMessage.value = '✅ Check-in registrado correctamente'
+  
+  setTimeout(() => {
+    showSuccessNotification.value = false
+  }, 3000)
+  
   loadMyRoutes()
 }
 
