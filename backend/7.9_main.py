@@ -47,38 +47,6 @@ app.add_middleware(
 )
 
 # ============================================================================
-# INICIALIZACIÓN CON RETRY AUTOMÁTICO
-# ============================================================================
-
-async def init_db_with_retry(max_retries: int = 5, delay: int = 2):
-    """
-    ✅ Inicializa BD con reintentos exponenciales
-    Espera a que PostgreSQL esté disponible antes de crear tablas
-    """
-    for attempt in range(max_retries):
-        try:
-            print(f"🔄 Intento {attempt + 1}/{max_retries} de conexión a BD...")
-            init_postgis()
-            Base.metadata.create_all(bind=engine)
-            print("✅ BD inicializada correctamente")
-            return True
-        except Exception as e:
-            if attempt < max_retries - 1:
-                wait_time = delay * (2 ** attempt)  # Backoff exponencial
-                print(f"⚠️ Error en intento {attempt + 1}: {str(e)}")
-                print(f"⏳ Esperando {wait_time}s antes de reintentar...")
-                import asyncio
-                await asyncio.sleep(wait_time)
-            else:
-                print(f"❌ Error fatal después de {max_retries} intentos: {str(e)}")
-                raise
-
-@app.on_event("startup")
-async def startup_event():
-    """Evento de startup: inicializar BD"""
-    await init_db_with_retry()
-
-# ============================================================================
 # MODELOS DE BD (SQLAlchemy)
 # ============================================================================
 
@@ -194,8 +162,10 @@ class Opportunity(Base):
     client = relationship("Client", back_populates="opportunities")
 
 
-# ✅ INICIALIZACIÓN DIFERIDA: NO ejecutar en startup del módulo
-# Se ejecutará en el evento @app.on_event("startup") con reintentos
+# Crear tablas
+# Inicializar PostGIS y crear tablas
+init_postgis()
+Base.metadata.create_all(bind=engine)
 
 # ============================================================================
 # SCHEMAS PYDANTIC (Validación de Entrada/Salida)
