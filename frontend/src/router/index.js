@@ -2,6 +2,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Admin from '../views/Admin.vue'
 import Comercial from '../views/Comercial.vue'
+import AdminGestion from '../views/AdminGestion.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -10,6 +11,10 @@ const router = createRouter({
       path: '/admin',
       component: Admin,
       meta: { role: 'admin' }
+    },
+    {
+      path: '/admin/gestion',
+      component: AdminGestion,
     },
     {
       path: '/comercial',
