@@ -241,36 +241,6 @@ class ClientResponse(BaseModel):
     email: Optional[str]
     client_type: str
     status: str
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    
-    class Config:
-        from_attributes = True
-
-
-class SellerResponse(BaseModel):
-    """Vendedor"""
-    id: str
-    name: str
-    email: str
-    phone: str
-    is_active: bool
-    
-    class Config:
-        from_attributes = True
-
-
-class RouteResponse(BaseModel):
-    """Ruta con cliente y vendedor relacionados"""
-    id: str
-    seller_id: str
-    client_id: str
-    planned_date: datetime
-    planned_time: str
-    status: str
-    created_at: datetime
-    client: Optional[ClientResponse] = None
-    seller: Optional[SellerResponse] = None
     
     class Config:
         from_attributes = True
@@ -538,15 +508,13 @@ def nearby_clients(
 
 # --- RUTAS ---
 
-@app.get("/routes/", response_model=List[RouteResponse])
+@app.get("/routes/")
 def list_routes(
     seller_id: Optional[str] = None,
     status: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Listar rutas con filtros - ✅ INCLUYE CLIENT Y SELLER"""
-    from sqlalchemy import func
-    
+    """Listar rutas con filtros"""
     query = db.query(Route).options(
         joinedload(Route.client),
         joinedload(Route.seller)
@@ -562,67 +530,7 @@ def list_routes(
     if status:
         query = query.filter(Route.status == status)
     
-    routes = query.all()
-    
-    # Convertir Geography a lat/lng
-    result = []
-    for route in routes:
-        route_dict = {
-            "id": str(route.id),
-            "seller_id": str(route.seller_id),
-            "client_id": str(route.client_id),
-            "planned_date": route.planned_date,
-            "planned_time": route.planned_time,
-            "status": route.status,
-            "created_at": route.created_at,
-            "seller": {
-                "id": str(route.seller.id),
-                "name": route.seller.name,
-                "email": route.seller.email,
-                "phone": route.seller.phone,
-                "is_active": route.seller.is_active
-            } if route.seller else None,
-            "client": None
-        }
-        
-        # Procesar cliente con conversión de Geography
-        if route.client:
-            try:
-                coords_wkt = db.query(func.ST_AsText(route.client.location)).scalar()
-                lat, lng = None, None
-                
-                if coords_wkt and coords_wkt.startswith("POINT"):
-                    coords_str = coords_wkt.replace("POINT(", "").replace(")", "")
-                    lng, lat = map(float, coords_str.split())
-                
-                route_dict["client"] = {
-                    "id": str(route.client.id),
-                    "name": route.client.name,
-                    "address": route.client.address,
-                    "phone": route.client.phone,
-                    "email": route.client.email,
-                    "client_type": route.client.client_type,
-                    "status": route.client.status,
-                    "latitude": lat,
-                    "longitude": lng
-                }
-            except Exception as e:
-                print(f"⚠️ Error procesando cliente {route.client.id}: {str(e)}")
-                route_dict["client"] = {
-                    "id": str(route.client.id),
-                    "name": route.client.name,
-                    "address": route.client.address,
-                    "phone": route.client.phone,
-                    "email": route.client.email,
-                    "client_type": route.client.client_type,
-                    "status": route.client.status,
-                    "latitude": None,
-                    "longitude": None
-                }
-        
-        result.append(route_dict)
-    
-    return result
+    return query.all()
 
 
 @app.post("/routes/")

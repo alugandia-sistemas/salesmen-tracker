@@ -224,6 +224,7 @@ import { ref, computed, onMounted } from 'vue'
 import CheckInModal from '../components/CheckInModal.vue'
 
 const API_URL = 'http://localhost:8000'
+//const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 // ============================================================================
 // ESTADO REACTIVO
@@ -402,14 +403,20 @@ const onCheckInSuccess = () => {
 // ============================================================================
 
 onMounted(async () => {
+  // check
+  console.log('🚀 onMounted ejecutándose...')
+  // check
   updateTime()
   setInterval(updateTime, 1000)
   
   await loadCurrentUser()
   await loadMyRoutes()
   
-  // Recargar cada 30 segundos
-  setInterval(loadMyRoutes, 30000)
+  // Recargar cada 60 segundos
+  setInterval(loadMyRoutes, 60000)
+
+  console.log('✅ Rutas cargadas:', myRoutes.value)
+  // check
 })
 </script>
 
