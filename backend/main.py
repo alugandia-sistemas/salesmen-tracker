@@ -260,6 +260,60 @@ class SellerResponse(BaseModel):
         from_attributes = True
 
 
+class ClientCreateRequest(BaseModel):
+    """Modelo para crear cliente"""
+    name: str
+    address: str
+    phone: str
+    email: Optional[str] = None
+    client_type: str
+    latitude: float
+    longitude: float
+    status: Optional[str] = "active"
+    
+    class Config:
+        from_attributes = True
+
+
+class ClientUpdateRequest(BaseModel):
+    """Modelo para actualizar cliente"""
+    name: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    client_type: Optional[str] = None
+    status: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class RouteCreateRequest(BaseModel):
+    """Modelo para crear ruta"""
+    seller_id: str
+    client_id: str
+    planned_date: str  # YYYY-MM-DD
+    planned_time: str  # HH:MM
+    status: Optional[str] = "pending"
+    
+    class Config:
+        from_attributes = True
+
+
+class RouteUpdateRequest(BaseModel):
+    """Modelo para actualizar ruta"""
+    seller_id: Optional[str] = None
+    client_id: Optional[str] = None
+    planned_date: Optional[str] = None
+    planned_time: Optional[str] = None
+    status: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+
 class RouteResponse(BaseModel):
     """Ruta con cliente y vendedor relacionados"""
     id: str
@@ -437,17 +491,62 @@ def list_clients(db: Session = Depends(get_db)):
     return result
 
 
+@app.post("/clients/")
+def create_client(
+    request: ClientCreateRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Crear cliente con ubicación GPS
+    El location se guarda como POINT(lng lat) en WGS84
+    """
+    from sqlalchemy import func
+    
+    try:
+        # PostGIS requiere: POINT(longitude latitude)
+        location_wkt = f"POINT({request.longitude} {request.latitude})"
+        
+        client = Client(
+            name=request.name,
+            address=request.address,
+            phone=request.phone,
+            email=request.email,
+            client_type=request.client_type,
+            status=request.status,
+            location=func.ST_GeomFromText(location_wkt, 4326)
+        )
+        
+        db.add(client)
+        db.commit()
+        db.refresh(client)
+        
+        # Convertir Geography a lat/lng para la respuesta
+        coords_wkt = db.query(func.ST_AsText(client.location)).scalar()
+        lat, lng = None, None
+        if coords_wkt and coords_wkt.startswith("POINT"):
+            coords_str = coords_wkt.replace("POINT(", "").replace(")", "")
+            lng, lat = map(float, coords_str.split())
+        
+        return {
+            "id": str(client.id),
+            "name": client.name,
+            "address": client.address,
+            "phone": client.phone,
+            "email": client.email,
+            "client_type": client.client_type,
+            "status": client.status,
+            "latitude": lat,
+            "longitude": lng,
+            "message": "Cliente creado correctamente"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al crear cliente: {str(e)}")
+
+
 @app.put("/clients/{client_id}")
 def update_client(
     client_id: str,
-    name: Optional[str] = None,
-    address: Optional[str] = None,
-    phone: Optional[str] = None,
-    email: Optional[str] = None,
-    client_type: Optional[str] = None,
-    status: Optional[str] = None,
-    latitude: Optional[float] = None,
-    longitude: Optional[float] = None,
+    request: ClientUpdateRequest,
     db: Session = Depends(get_db)
 ):
     """Actualizar cliente"""
@@ -463,22 +562,22 @@ def update_client(
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     
     # Actualizar campos
-    if name:
-        client.name = name
-    if address:
-        client.address = address
-    if phone:
-        client.phone = phone
-    if email:
-        client.email = email
-    if client_type:
-        client.client_type = client_type
-    if status:
-        client.status = status
+    if request.name:
+        client.name = request.name
+    if request.address:
+        client.address = request.address
+    if request.phone:
+        client.phone = request.phone
+    if request.email:
+        client.email = request.email
+    if request.client_type:
+        client.client_type = request.client_type
+    if request.status:
+        client.status = request.status
     
     # Actualizar ubicación si se proporciona
-    if latitude is not None and longitude is not None:
-        location_wkt = f"POINT({longitude} {latitude})"
+    if request.latitude is not None and request.longitude is not None:
+        location_wkt = f"POINT({request.longitude} {request.latitude})"
         client.location = func.ST_GeomFromText(location_wkt, 4326)
     
     db.commit()
@@ -677,42 +776,46 @@ def list_routes(
 
 @app.post("/routes/")
 def create_route(
-    seller_id: str,
-    client_id: str,
-    planned_date: str,  # YYYY-MM-DD
-    planned_time: str,  # HH:MM
+    request: RouteCreateRequest,
     db: Session = Depends(get_db)
 ):
     """Crear ruta"""
     try:
-        seller_uuid = uuid.UUID(seller_id)
-        client_uuid = uuid.UUID(client_id)
+        seller_uuid = uuid.UUID(request.seller_id)
+        client_uuid = uuid.UUID(request.client_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"IDs inválidos: {str(e)}")
     
-    route = Route(
-        seller_id=seller_uuid,
-        client_id=client_uuid,
-        planned_date=datetime.fromisoformat(f"{planned_date}T{planned_time}:00"),
-        planned_time=planned_time,
-        status="pending"
-    )
-    
-    db.add(route)
-    db.commit()
-    db.refresh(route)
-    
-    return {"id": str(route.id), "message": "Ruta creada"}
+    try:
+        route = Route(
+            seller_id=seller_uuid,
+            client_id=client_uuid,
+            planned_date=datetime.fromisoformat(f"{request.planned_date}T{request.planned_time}:00"),
+            planned_time=request.planned_time,
+            status=request.status
+        )
+        
+        db.add(route)
+        db.commit()
+        db.refresh(route)
+        
+        return {
+            "id": str(route.id),
+            "seller_id": str(route.seller_id),
+            "client_id": str(route.client_id),
+            "planned_date": route.planned_date.isoformat(),
+            "planned_time": route.planned_time,
+            "status": route.status,
+            "message": "Ruta creada correctamente"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al crear ruta: {str(e)}")
 
 
 @app.put("/routes/{route_id}")
 def update_route(
     route_id: str,
-    seller_id: Optional[str] = None,
-    client_id: Optional[str] = None,
-    planned_date: Optional[str] = None,
-    planned_time: Optional[str] = None,
-    status: Optional[str] = None,
+    request: RouteUpdateRequest,
     db: Session = Depends(get_db)
 ):
     """Actualizar ruta"""
@@ -726,29 +829,37 @@ def update_route(
         raise HTTPException(status_code=404, detail="Ruta no encontrada")
     
     # Actualizar campos
-    if seller_id:
+    if request.seller_id:
         try:
-            route.seller_id = uuid.UUID(seller_id)
+            route.seller_id = uuid.UUID(request.seller_id)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"seller_id inválido: {seller_id}")
+            raise HTTPException(status_code=400, detail=f"seller_id inválido: {request.seller_id}")
     
-    if client_id:
+    if request.client_id:
         try:
-            route.client_id = uuid.UUID(client_id)
+            route.client_id = uuid.UUID(request.client_id)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"client_id inválido: {client_id}")
+            raise HTTPException(status_code=400, detail=f"client_id inválido: {request.client_id}")
     
-    if planned_date and planned_time:
-        route.planned_date = datetime.fromisoformat(f"{planned_date}T{planned_time}:00")
-        route.planned_time = planned_time
+    if request.planned_date and request.planned_time:
+        route.planned_date = datetime.fromisoformat(f"{request.planned_date}T{request.planned_time}:00")
+        route.planned_time = request.planned_time
     
-    if status:
-        route.status = status
+    if request.status:
+        route.status = request.status
     
     db.commit()
     db.refresh(route)
     
-    return {"id": str(route.id), "message": "Ruta actualizada"}
+    return {
+        "id": str(route.id),
+        "seller_id": str(route.seller_id),
+        "client_id": str(route.client_id),
+        "planned_date": route.planned_date.isoformat(),
+        "planned_time": route.planned_time,
+        "status": route.status,
+        "message": "Ruta actualizada"
+    }
 
 
 @app.delete("/routes/{route_id}")

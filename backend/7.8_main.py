@@ -446,6 +446,7 @@ def create_client(
     longitude: float,
     client_type: str,
     email: Optional[str] = None,
+    status: Optional[str] = "active",
     db: Session = Depends(get_db)
 ):
     """
@@ -454,23 +455,131 @@ def create_client(
     """
     from sqlalchemy import func
     
-    # PostGIS requiere: POINT(longitude latitude)
-    location_wkt = f"POINT({longitude} {latitude})"
+    try:
+        # PostGIS requiere: POINT(longitude latitude)
+        location_wkt = f"POINT({longitude} {latitude})"
+        
+        client = Client(
+            name=name,
+            address=address,
+            phone=phone,
+            email=email,
+            client_type=client_type,
+            status=status,
+            location=func.ST_GeomFromText(location_wkt, 4326)
+        )
+        
+        db.add(client)
+        db.commit()
+        db.refresh(client)
+        
+        # Convertir Geography a lat/lng para la respuesta
+        coords_wkt = db.query(func.ST_AsText(client.location)).scalar()
+        lat, lng = None, None
+        if coords_wkt and coords_wkt.startswith("POINT"):
+            coords_str = coords_wkt.replace("POINT(", "").replace(")", "")
+            lng, lat = map(float, coords_str.split())
+        
+        return {
+            "id": str(client.id),
+            "name": client.name,
+            "address": client.address,
+            "phone": client.phone,
+            "email": client.email,
+            "client_type": client.client_type,
+            "status": client.status,
+            "latitude": lat,
+            "longitude": lng,
+            "message": "Cliente creado correctamente"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al crear cliente: {str(e)}")
+
+
+@app.put("/clients/{client_id}")
+def update_client(
+    client_id: str,
+    name: Optional[str] = None,
+    address: Optional[str] = None,
+    phone: Optional[str] = None,
+    email: Optional[str] = None,
+    client_type: Optional[str] = None,
+    status: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    db: Session = Depends(get_db)
+):
+    """Actualizar cliente"""
+    from sqlalchemy import func
     
-    client = Client(
-        name=name,
-        address=address,
-        phone=phone,
-        email=email,
-        client_type=client_type,
-        location=func.ST_GeomFromText(location_wkt, 4326)
-    )
+    try:
+        client_uuid = uuid.UUID(client_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"client_id inválido: {client_id}")
     
-    db.add(client)
+    client = db.query(Client).filter(Client.id == client_uuid).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    # Actualizar campos
+    if name:
+        client.name = name
+    if address:
+        client.address = address
+    if phone:
+        client.phone = phone
+    if email:
+        client.email = email
+    if client_type:
+        client.client_type = client_type
+    if status:
+        client.status = status
+    
+    # Actualizar ubicación si se proporciona
+    if latitude is not None and longitude is not None:
+        location_wkt = f"POINT({longitude} {latitude})"
+        client.location = func.ST_GeomFromText(location_wkt, 4326)
+    
     db.commit()
     db.refresh(client)
     
-    return {"id": str(client.id), "name": client.name, "message": "Cliente creado"}
+    # Convertir Geography a lat/lng
+    coords_wkt = db.query(func.ST_AsText(client.location)).scalar()
+    lat, lng = None, None
+    if coords_wkt and coords_wkt.startswith("POINT"):
+        coords_str = coords_wkt.replace("POINT(", "").replace(")", "")
+        lng, lat = map(float, coords_str.split())
+    
+    return {
+        "id": str(client.id),
+        "name": client.name,
+        "address": client.address,
+        "phone": client.phone,
+        "email": client.email,
+        "client_type": client.client_type,
+        "status": client.status,
+        "latitude": lat,
+        "longitude": lng,
+        "message": "Cliente actualizado"
+    }
+
+
+@app.delete("/clients/{client_id}")
+def delete_client(client_id: str, db: Session = Depends(get_db)):
+    """Eliminar cliente"""
+    try:
+        client_uuid = uuid.UUID(client_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"client_id inválido: {client_id}")
+    
+    client = db.query(Client).filter(Client.id == client_uuid).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    db.delete(client)
+    db.commit()
+    
+    return {"id": str(client.id), "message": "Cliente eliminado"}
 
 
 @app.get("/clients/nearby/")
@@ -652,7 +761,71 @@ def create_route(
     db.commit()
     db.refresh(route)
     
-    return route
+    return {"id": str(route.id), "message": "Ruta creada"}
+
+
+@app.put("/routes/{route_id}")
+def update_route(
+    route_id: str,
+    seller_id: Optional[str] = None,
+    client_id: Optional[str] = None,
+    planned_date: Optional[str] = None,
+    planned_time: Optional[str] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Actualizar ruta"""
+    try:
+        route_uuid = uuid.UUID(route_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"route_id inválido: {route_id}")
+    
+    route = db.query(Route).filter(Route.id == route_uuid).first()
+    if not route:
+        raise HTTPException(status_code=404, detail="Ruta no encontrada")
+    
+    # Actualizar campos
+    if seller_id:
+        try:
+            route.seller_id = uuid.UUID(seller_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"seller_id inválido: {seller_id}")
+    
+    if client_id:
+        try:
+            route.client_id = uuid.UUID(client_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"client_id inválido: {client_id}")
+    
+    if planned_date and planned_time:
+        route.planned_date = datetime.fromisoformat(f"{planned_date}T{planned_time}:00")
+        route.planned_time = planned_time
+    
+    if status:
+        route.status = status
+    
+    db.commit()
+    db.refresh(route)
+    
+    return {"id": str(route.id), "message": "Ruta actualizada"}
+
+
+@app.delete("/routes/{route_id}")
+def delete_route(route_id: str, db: Session = Depends(get_db)):
+    """Eliminar ruta"""
+    try:
+        route_uuid = uuid.UUID(route_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"route_id inválido: {route_id}")
+    
+    route = db.query(Route).filter(Route.id == route_uuid).first()
+    if not route:
+        raise HTTPException(status_code=404, detail="Ruta no encontrada")
+    
+    db.delete(route)
+    db.commit()
+    
+    return {"id": str(route.id), "message": "Ruta eliminada"}
 
 
 # ============================================================================
