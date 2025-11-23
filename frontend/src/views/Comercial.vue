@@ -214,8 +214,8 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import CheckInModal from './components/CheckInModal.vue'
-import CheckOutModal from './components/CheckOutModal.vue'
+import CheckInModal from '../components/CheckInModal.vue'
+import CheckOutModal from '../components/CheckOutModal.vue'
 
 const API_URL = 'http://localhost:8000'
 
