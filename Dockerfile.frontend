@@ -1,39 +1,15 @@
-# Stage 1: Build
 FROM node:18-alpine AS builder
+   WORKDIR /app
+   COPY frontend/package*.json ./
+   RUN npm install --legacy-peer-deps
+   COPY frontend/ .
+   RUN npm run build
 
-WORKDIR /app
-
-# Copiar package.json (y package-lock.json si existe)
-COPY frontend/package*.json ./
-
-# 🔧 IMPORTANTE: Limpiar cache de npm
-# para evitar errores de dependencias opcionales en Alpine
-RUN npm cache clean --force
-
-# ✅ Usar npm install (no npm ci) para más flexibilidad
-# Instala incluso sin package-lock.json
-RUN npm install --legacy-peer-deps
-
-# Copiar código fuente
-COPY frontend/ .
-
-# Build
-RUN npm run build
-
-# Stage 2: Serve
-FROM node:18-alpine
-
-WORKDIR /app
-
-# Instalar serve
-RUN npm install -g serve
-
-# Copiar dist desde stage anterior
-COPY --from=builder /app/dist ./dist
-
-# ✅ PUERTO 5173 (consistente con Vite)
-EXPOSE 5173
-
-# Iniciar servidor con puerto 5173
-# CMD ["serve", "-s", "dist", "-l", "tcp://0.0.0.0:5173"]
-CMD ["serve", "-s", "dist", "-l", "5173"]
+   FROM node:18-alpine
+   WORKDIR /app
+   RUN npm install -g serve
+   COPY --from=builder /app/dist ./dist
+   EXPOSE 5173
+   
+   # ✅ CAMBIO AQUÍ:
+   CMD ["serve", "-s", "dist", "-l", "0.0.0.0:5173"]
