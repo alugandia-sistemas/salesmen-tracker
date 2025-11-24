@@ -7,9 +7,12 @@ RUN npm run build
 
 FROM node:18-alpine
 WORKDIR /app
-RUN npm install -g serve
+
+# ✅ Instalar http-server en lugar de serve
+RUN npm install -g http-server
+
 COPY --from=builder /app/dist ./dist
 EXPOSE 5173
 
-# ✅ CORRECTO:
-CMD ["serve", "-s", "dist", "-p", "5173"]
+# ✅ http-server escucha en 0.0.0.0 por defecto
+CMD ["http-server", "dist", "-p", "5173", "-a", "0.0.0.0"]
