@@ -4,7 +4,7 @@
     <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
       <div class="px-4 py-4">
         <div class="flex justify-between items-center">
-          <router-link to="/admin" class="text-2xl font-bold text-gray-900 hover:opacity-70">
+          <router-link to="/admin" class="text-2xl font-bold text-slate-900 hover:opacity-70">
             ← Alugandia
           </router-link>
           <button @click="logout" class="bg-gray-900 text-white px-3 py-2 rounded-lg text-sm font-semibold">
@@ -19,7 +19,7 @@
     <div class="px-4 py-6 pb-20">
       <!-- Title + Create Button -->
       <div class="mb-8">
-        <h2 class="text-3xl font-bold text-gray-900 mb-4">Vendedores</h2>
+        <h2 class="text-3xl font-bold text-slate-900 mb-4">Vendedores</h2>
         <button 
           @click="showCreateModal = true" 
           class="w-full bg-gray-900 text-white py-4 rounded-xl font-semibold text-lg hover:bg-gray-800 transition"
@@ -39,7 +39,7 @@
               </span>
             </div>
             <div class="flex-1 min-w-0">
-              <h3 class="text-lg font-bold text-gray-900">{{ seller.name }}</h3>
+              <h3 class="text-lg font-bold text-slate-900">{{ seller.name }}</h3>
               <p class="text-gray-600 text-sm truncate">{{ seller.email }}</p>
             </div>
           </div>
@@ -55,7 +55,7 @@
             <div class="flex items-center gap-2">
               <span 
                 class="px-3 py-1 rounded-full text-sm font-semibold"
-                :class="seller.is_active ? 'bg-gray-200 text-gray-900' : 'bg-gray-100 text-gray-600'"
+                :class="seller.is_active ? 'bg-gray-200 text-slate-900' : 'bg-gray-100 text-gray-600'"
               >
                 {{ seller.is_active ? '✓ Activo' : '• Inactivo' }}
               </span>
@@ -66,7 +66,7 @@
           <div class="flex gap-2">
             <button 
               @click="editSeller(seller)" 
-              class="flex-1 bg-gray-100 text-black-900 py-3 rounded-lg font-semibold text-sm hover:bg-gray-200 transition"
+              class="flex-1 bg-gray-100 text-slate-900 py-3 rounded-lg font-semibold text-sm hover:bg-gray-200 transition"
             >
               Editar
             </button>
@@ -83,7 +83,7 @@
       <!-- Empty State -->
       <div v-else class="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center">
         <div class="text-4xl mb-3">📋</div>
-        <h3 class="text-xl font-bold text-gray-900 mb-2">Sin vendedores</h3>
+        <h3 class="text-xl font-bold text-slate-900 mb-2">Sin vendedores</h3>
         <p class="text-gray-600 text-sm mb-6">Comienza creando tu primer vendedor</p>
         <button 
           @click="showCreateModal = true" 
@@ -97,13 +97,13 @@
     <!-- Create/Edit Modal -->
     <div v-if="showCreateModal" class="fixed inset-0 bg-black/40 flex items-end z-50 pb-safe">
       <div class="w-full bg-white rounded-t-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-        <h3 class="text-2xl font-bold text-gray-900 mb-6">
+        <h3 class="text-2xl font-bold text-slate-900 mb-6">
           {{ editingId ? 'Editar Vendedor' : 'Nuevo Vendedor' }}
         </h3>
 
         <form @submit.prevent="saveSeller" class="space-y-5">
           <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Nombre</label>
+            <label class="block text-sm font-semibold text-slate-900 mb-2">Nombre</label>
             <input 
               v-model="form.name" 
               type="text" 
@@ -114,7 +114,7 @@
           </div>
 
           <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Email</label>
+            <label class="block text-sm font-semibold text-slate-900 mb-2">Email</label>
             <input 
               v-model="form.email" 
               type="email" 
@@ -125,7 +125,7 @@
           </div>
 
           <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Teléfono</label>
+            <label class="block text-sm font-semibold text-slate-900 mb-2">Teléfono</label>
             <input 
               v-model="form.phone" 
               type="tel" 
@@ -142,14 +142,14 @@
               id="active"
               class="w-5 h-5 accent-gray-900"
             />
-            <label for="active" class="text-gray-900 font-semibold">Vendedor Activo</label>
+            <label for="active" class="text-slate-900 font-semibold">Vendedor Activo</label>
           </div>
 
           <div class="flex gap-3 mt-8 pt-6 border-t border-gray-200">
             <button 
               type="button"
               @click="closeModal()"
-              class="flex-1 bg-gray-100 text-gray-900 py-4 rounded-lg font-semibold text-lg hover:bg-gray-200 transition"
+              class="flex-1 bg-gray-100 text-slate-900 py-4 rounded-lg font-semibold text-lg hover:bg-gray-200 transition"
             >
               Cancelar
             </button>
