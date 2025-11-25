@@ -26,44 +26,14 @@ Base = declarative_base()
 
 # ✅ HABILITAR POSTGIS AUTOMÁTICAMENTE AL STARTUP
 def init_postgis():
-    """
-    Habilita PostGIS en la base de datos
-    En Railway: instala la extensión si no existe
-    """
+    """Habilita PostGIS en la base de datos si no está activo"""
     try:
         with engine.connect() as connection:
-            # Intento 1: Crear extensión directamente
-            try:
-                connection.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
-                connection.commit()
-                print("✅ PostGIS habilitado correctamente")
-                return
-            except Exception as e1:
-                # Intento 2: Si el usuario no tiene permisos, intentar con superusuario
-                # En Railway, el usuario 'postgres' es superusuario
-                if "permission denied" in str(e1).lower() or "not available" in str(e1).lower():
-                    print(f"⚠️ Intento 1 falló: {str(e1)}")
-                    print("🔧 Intentando instalación alternativa de PostGIS...")
-                    
-                    # Desconectar y reconectar como postgres
-                    connection.close()
-                    
-                    # Reintentar con CREATE EXTENSION
-                    with engine.connect() as conn2:
-                        try:
-                            conn2.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
-                            conn2.commit()
-                            print("✅ PostGIS instalado en segundo intento")
-                            return
-                        except Exception as e2:
-                            print(f"⚠️ PostGIS no disponible: {str(e2)}")
-                            print("ℹ️ En Railway: verifica que PostgreSQL incluya PostGIS")
-                            # No lanzar error - permitir que continúe sin PostGIS
-                else:
-                    raise e1
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+            connection.commit()
+            print("✅ PostGIS habilitado correctamente")
     except Exception as e:
-        print(f"⚠️ Error crítico en PostGIS: {str(e)}")
-        # No lanzar - permitir startup sin PostGIS (fallback mode)
+        print(f"⚠️ PostGIS: {str(e)}")
 
 app = FastAPI(title="Salesmen Tracker - Alugandia")
 
@@ -230,30 +200,6 @@ class Opportunity(Base):
 # ============================================================================
 # SCHEMAS PYDANTIC (Validación de Entrada/Salida)
 # ============================================================================
-
-class SellerCreate(BaseModel):
-    """Crear o actualizar vendedor"""
-    name: str
-    email: str
-    phone: str
-    is_active: bool = True
-
-    class Config:
-        from_attributes = True
-
-
-class SellerResponse(BaseModel):
-    """Respuesta de vendedor"""
-    id: str
-    name: str
-    email: str
-    phone: str
-    is_active: bool
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
 
 class CheckInRequest(BaseModel):
     """
@@ -519,113 +465,19 @@ def validate_checkin(
 
 @app.get("/sellers/")
 def list_sellers(db: Session = Depends(get_db)):
-    """Listar todos los vendedores (activos e inactivos)"""
-    sellers = db.query(Seller).all()
+    """Listar vendedores"""
+    sellers = db.query(Seller).filter(Seller.is_active == True).all()
     return sellers
 
 
 @app.post("/sellers/")
-def create_seller(seller: SellerCreate, db: Session = Depends(get_db)):
+def create_seller(name: str, email: str, phone: str, db: Session = Depends(get_db)):
     """Crear vendedor"""
-    try:
-        new_seller = Seller(
-            name=seller.name,
-            email=seller.email,
-            phone=seller.phone,
-            is_active=seller.is_active
-        )
-        db.add(new_seller)
-        db.commit()
-        db.refresh(new_seller)
-        return {
-            "id": str(new_seller.id),
-            "name": new_seller.name,
-            "email": new_seller.email,
-            "phone": new_seller.phone,
-            "is_active": new_seller.is_active,
-            "created_at": new_seller.created_at.isoformat() if new_seller.created_at else None
-        }
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error creando vendedor: {str(e)}")
-
-
-@app.get("/sellers/{seller_id}")
-def get_seller(seller_id: str, db: Session = Depends(get_db)):
-    """Obtener vendedor por ID"""
-    try:
-        seller_uuid = uuid.UUID(seller_id)
-        seller = db.query(Seller).filter(Seller.id == seller_uuid).first()
-        if not seller:
-            raise HTTPException(status_code=404, detail="Vendedor no encontrado")
-        
-        return {
-            "id": str(seller.id),
-            "name": seller.name,
-            "email": seller.email,
-            "phone": seller.phone,
-            "is_active": seller.is_active,
-            "created_at": seller.created_at.isoformat() if seller.created_at else None
-        }
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"seller_id inválido: {seller_id}")
-
-
-@app.put("/sellers/{seller_id}")
-def update_seller(seller_id: str, seller: SellerCreate, db: Session = Depends(get_db)):
-    """Actualizar vendedor"""
-    try:
-        seller_uuid = uuid.UUID(seller_id)
-        db_seller = db.query(Seller).filter(Seller.id == seller_uuid).first()
-        
-        if not db_seller:
-            raise HTTPException(status_code=404, detail="Vendedor no encontrado")
-        
-        db_seller.name = seller.name
-        db_seller.email = seller.email
-        db_seller.phone = seller.phone
-        db_seller.is_active = seller.is_active
-        
-        db.commit()
-        db.refresh(db_seller)
-        
-        return {
-            "id": str(db_seller.id),
-            "name": db_seller.name,
-            "email": db_seller.email,
-            "phone": db_seller.phone,
-            "is_active": db_seller.is_active,
-            "created_at": db_seller.created_at.isoformat() if db_seller.created_at else None
-        }
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"seller_id inválido: {seller_id}")
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error actualizando vendedor: {str(e)}")
-
-
-@app.delete("/sellers/{seller_id}")
-def delete_seller(seller_id: str, db: Session = Depends(get_db)):
-    """Eliminar vendedor"""
-    try:
-        seller_uuid = uuid.UUID(seller_id)
-        db_seller = db.query(Seller).filter(Seller.id == seller_uuid).first()
-        
-        if not db_seller:
-            raise HTTPException(status_code=404, detail="Vendedor no encontrado")
-        
-        db.delete(db_seller)
-        db.commit()
-        
-        return {
-            "message": "Vendedor eliminado correctamente",
-            "seller_id": seller_id
-        }
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"seller_id inválido: {seller_id}")
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error eliminando vendedor: {str(e)}")
+    seller = Seller(name=name, email=email, phone=phone)
+    db.add(seller)
+    db.commit()
+    db.refresh(seller)
+    return seller
 
 
 # --- CLIENTES ---
