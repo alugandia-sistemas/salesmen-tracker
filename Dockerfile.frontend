@@ -1,18 +1,16 @@
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY frontend/package*.json ./
-RUN npm install --legacy-peer-deps
-COPY frontend/ .
-RUN npm run build
-
+# Dockerfile para desarrollo (ejecutar vite)
 FROM node:18-alpine
 WORKDIR /app
 
-# ✅ Instalar http-server en lugar de serve
-RUN npm install -g http-server
+# Copiamos solo package*.json primero para cache
+COPY frontend/package*.json ./
 
-COPY --from=builder /app/dist ./dist
+# Forzamos instalación incluyendo devDependencies
+ENV NODE_ENV=development
+RUN npm ci
+
+# Copiamos el resto
+COPY frontend/ ./
+
 EXPOSE 5173
-
-# ✅ http-server escucha en 0.0.0.0 por defecto
-CMD ["http-server", "dist", "-p", "5173", "-a", "0.0.0.0"]
+CMD ["npm", "run", "dev", "--", "--host"]
