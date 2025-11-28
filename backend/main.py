@@ -1196,14 +1196,19 @@ def list_invitations(
 
     
 
-@app.post("/auth/register-with-token/", response_model=dict)
+@app.post("/auth/register-with-token/")
 def register_with_token(
-    token: str,
-    password: str,
+    request: dict,
     db: Session = Depends(get_db)
 ):
     """Vendedor se registra usando token de invitación"""
     try:
+        token = request.get("token")
+        password = request.get("password")
+        
+        if not token or not password:
+            raise HTTPException(status_code=400, detail="Token y password requeridos")
+        
         # Validar token
         invitation = db.query(Invitation).filter(
             Invitation.token == token,
@@ -1253,9 +1258,8 @@ def register_with_token(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error: {str(e)}")
-    
- 
 
+   
 # ============================================================================
 # ✅ CHECK-IN/CHECK-OUT REDISEÑADO CON VALIDACIÓN ROBUSTA
 # ============================================================================
