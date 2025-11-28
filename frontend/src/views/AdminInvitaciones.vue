@@ -13,6 +13,35 @@
       </div>
     </nav>
 
+    <!-- Tabs Navigation -->
+    <div class="bg-white border-b border-gray-200 sticky top-16 z-40">
+      <div class="px-4 py-0 flex gap-0 overflow-x-auto">
+        <button 
+          @click="$router.push('/admin/gestion')"
+          class="px-4 py-4 font-semibold text-sm border-b-2 border-transparent text-gray-600 hover:text-gray-900 transition whitespace-nowrap"
+        >
+          👥 Vendedores
+        </button>
+        <button 
+          @click="$router.push('/admin/gestion')"
+          class="px-4 py-4 font-semibold text-sm border-b-2 border-transparent text-gray-600 hover:text-gray-900 transition whitespace-nowrap"
+        >
+          🏢 Clientes
+        </button>
+        <button 
+          @click="$router.push('/admin/gestion')"
+          class="px-4 py-4 font-semibold text-sm border-b-2 border-transparent text-gray-600 hover:text-gray-900 transition whitespace-nowrap"
+        >
+          🗺️ Rutas
+        </button>
+        <button 
+          class="px-4 py-4 font-semibold text-sm border-b-2 border-gray-900 text-gray-900 transition whitespace-nowrap"
+        >
+          📧 Invitaciones
+        </button>
+      </div>
+    </div>
+
     <!-- Content -->
     <div class="px-4 py-6 pb-20">
       <h2 class="text-3xl font-bold text-gray-900 mb-8">Invitaciones de Vendedores</h2>
@@ -28,7 +57,7 @@
               v-model="nuevoVendedor.nombre" 
               type="text" 
               placeholder="Ej: Ernesto Arocas"
-              class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900"
+              class="w-full px-4 py-3 text-lg text-gray-900 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 placeholder-gray-500"
               required
             />
           </div>
@@ -39,7 +68,7 @@
               v-model="nuevoVendedor.email" 
               type="email" 
               placeholder="Ej: ernesto@alugandia.com"
-              class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900"
+              class="w-full px-4 py-3 text-lg text-gray-900 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 placeholder-gray-500"
               required
             />
           </div>
@@ -50,7 +79,7 @@
               v-model="nuevoVendedor.telefono" 
               type="tel" 
               placeholder="Ej: +34 600 123 456"
-              class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900"
+              class="w-full px-4 py-3 text-lg text-gray-900 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 placeholder-gray-500"
               required
             />
           </div>
@@ -111,7 +140,7 @@
                 :value="getInviteLink(inv.token)" 
                 type="text" 
                 readonly
-                class="flex-1 px-4 py-3 bg-gray-100 border-2 border-gray-300 rounded-lg text-sm text-gray-900 font-mono focus:outline-none"
+                class="flex-1 px-4 py-3 text-sm text-gray-900 bg-gray-100 border-2 border-gray-300 rounded-lg font-mono focus:outline-none"
               />
               <button 
                 @click="copiarLink(inv.token)"

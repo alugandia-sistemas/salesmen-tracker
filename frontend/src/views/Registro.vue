@@ -18,7 +18,7 @@
               v-model="nombre" 
               type="text" 
               placeholder="Ej: Ernesto Arocas"
-              class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900"
+              class="w-full px-4 py-3 text-lg text-gray-900 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 placeholder-gray-500"
               required
             />
           </div>
@@ -29,7 +29,7 @@
               v-model="email" 
               type="email" 
               placeholder="tu@email.com"
-              class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900"
+              class="w-full px-4 py-3 text-lg text-gray-900 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 placeholder-gray-500"
               required
             />
           </div>
@@ -40,7 +40,7 @@
               v-model="phone" 
               type="tel"
               placeholder="+34 600 123 456"
-              class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900"
+              class="w-full px-4 py-3 text-lg text-gray-900 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 placeholder-gray-500"
               required
             />
           </div>
@@ -51,7 +51,7 @@
               v-model="password" 
               type="password"
               placeholder="••••••••"
-              class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900"
+              class="w-full px-4 py-3 text-lg text-gray-900 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 placeholder-gray-500"
               required
             />
             <p class="text-gray-500 text-xs mt-1">Mínimo 6 caracteres</p>
@@ -63,7 +63,7 @@
               v-model="passwordConfirm" 
               type="password"
               placeholder="••••••••"
-              class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900"
+              class="w-full px-4 py-3 text-lg text-gray-900 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 placeholder-gray-500"
               required
             />
           </div>
