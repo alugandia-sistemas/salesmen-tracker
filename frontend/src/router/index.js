@@ -1,35 +1,61 @@
-// src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
-// import Login from '../views/Login.vue'
-import Admin from '../views/Admin.vue'
-import AdminGestion from '../views/AdminGestion.vue'
+
+import Login from '../views/Login.vue'
+import Registro from '../views/Registro.vue'
 import Comercial from '../views/Comercial.vue'
+import AdminGestion from '../views/AdminGestion.vue'
 
 const routes = [
-  // { path: '/', redirect: '/login' },
-  // { path: '/login', component: Login },
-  
-  { path: '/', redirect: '/comercial' },
+  // Auth
   { 
-    path: '/admin', 
-    component: Admin,
-    meta: { requiresAuth: true, role: 'admin' }
+    path: '/login', 
+    component: Login,
+    meta: { requiresAuth: false }
   },
   { 
-    path: '/admin/gestion', 
-    component: AdminGestion,
-    meta: { requiresAuth: true, role: 'admin' }
+    path: '/registro', 
+    component: Registro,
+    meta: { requiresAuth: false }
   },
+
+  // Vendedor
   { 
     path: '/comercial', 
     component: Comercial,
-    meta: { requiresAuth: true, role: 'comercial' }
+    meta: { requiresAuth: true }
+  },
+
+  // Admin
+  { 
+    path: '/admin/gestion', 
+    component: AdminGestion,
+    meta: { requiresAuth: true }
+  },
+
+  // Redirect
+  { 
+    path: '/', 
+    redirect: '/comercial' 
   }
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes
+})
+
+// Guard: Verificar autenticación
+router.beforeEach((to, from, next) => {
+  const token = localStorage.getItem('token')
+  const requiresAuth = to.meta.requiresAuth
+
+  if (requiresAuth && !token) {
+    next('/login')
+  } else if ((to.path === '/login' || to.path === '/registro') && token) {
+    next('/comercial')
+  } else {
+    next()
+  }
 })
 
 export default router

@@ -38,7 +38,7 @@
             <!-- Status badges -->
             <div class="flex gap-2 mb-4">
               <span class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-900">
-                📅 {{ formatDate(ruta.planned_date) }}
+                {{ ruta.planned_time }}
               </span>
               <span 
                 class="px-3 py-1 rounded-full text-xs font-semibold"
@@ -214,7 +214,6 @@ export default {
   name: 'Comercial',
   data() {
     return {
-      seller: null,
       sellerName: 'Vendedor',
       routesHoy: [],
       visitasRecientes: [],
@@ -234,16 +233,6 @@ export default {
     }
   },
   mounted() {
-    // Verificar si está logueado
-    const sellerData = localStorage.getItem('seller')
-    if (!sellerData) {
-      this.$router.push('/login')
-      return
-    }
-
-    this.seller = JSON.parse(sellerData)
-    this.sellerName = this.seller.name
-
     this.fetchRutasHoy()
     this.fetchVisitas()
     this.fetchClientes()
@@ -257,7 +246,7 @@ export default {
   methods: {
     async fetchRutasHoy() {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/routes/?seller_id=${this.seller.id}`)
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/routes/`)
         const todas = await response.json()
         
         // Filtrar por hoy
