@@ -1,16 +1,14 @@
-# Dockerfile para desarrollo (ejecutar vite)
 FROM node:18-alpine
+
 WORKDIR /app
 
-# Copiamos solo package*.json primero para cache
 COPY frontend/package*.json ./
 
-# Forzamos instalación incluyendo devDependencies
-ENV NODE_ENV=development
 RUN npm ci
 
-# Copiamos el resto
 COPY frontend/ ./
 
 EXPOSE 5173
-CMD ["npm", "run", "dev", "--", "--host"]
+
+# Desarrollo por defecto (si quieres producción, pasar NODE_ENV=production)
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
