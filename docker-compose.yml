@@ -1,7 +1,7 @@
+version: '3.8'
 
 services:
   postgres:
-    # ✅ IMPORTANTE: Usar postgis en lugar de postgres normal
     image: postgis/postgis:15-3.3
     container_name: salesmen_tracker_postgres
     environment:
@@ -9,13 +9,9 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: salesmen_tracker
     ports:
-      # 🔌 PUERTO LOCAL (tu máquina): 5433 (no conflictúa con 5432 local)
-      # 🔌 PUERTO CONTENEDOR: 5432 (interno en Docker)
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Script de inicialización para habilitar extensión
-      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -33,7 +29,7 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/salesmen_tracker"
-      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000"
+      CORS_ORIGINS: "http://localhost:5173"
       PORT: "8000"
     depends_on:
       postgres:
@@ -45,22 +41,17 @@ services:
       - app-network
 
   frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
+    image: node:18-alpine
     container_name: salesmen_tracker_frontend
     ports:
       - "5173:5173"
     environment:
       VITE_API_URL: "http://localhost:8000"
-      NODE_ENV: "development"
-    depends_on:
-      - backend
+    working_dir: /app
     volumes:
       - ./frontend:/app
-      # Importante: No montar node_modules para evitar conflictos
       - /app/node_modules
-    command: npm run dev -- --host 0.0.0.0 --port 5173
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     networks:
       - app-network
 
