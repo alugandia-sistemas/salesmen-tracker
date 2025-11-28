@@ -165,14 +165,7 @@ export default {
       this.error = null
 
       try {
-        // En una implementación real, validarías el token en el backend
-        // Por ahora, simulamos una respuesta exitosa
-        
-        // IMPORTANTE: Aquí debería hacer un GET a /admin/invitations/validate/{token}
-        // pero como no lo implementamos, asumimos que es válido
-        
-        // En producción descomentar:
-        /*
+        // Validar token en el backend
         const response = await fetch(
           `${import.meta.env.VITE_API_URL}/invitations/validate/${this.token}`
         )
@@ -187,12 +180,6 @@ export default {
         this.emailToken = data.email
         this.nombreToken = data.seller_name
         this.telefonoToken = data.seller_phone
-        */
-        
-        // DEMO: Simular datos del token
-        this.emailToken = 'vendedor@alugandia.com'
-        this.nombreToken = 'Nuevo Vendedor'
-        this.telefonoToken = '+34 600 000 000'
         
         this.tokenValido = true
       } catch (e) {

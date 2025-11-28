@@ -1142,9 +1142,31 @@ def create_invitation(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error: {str(e)}")
-   
+ 
+@app.get("/invitations/validate/{token}")
+def validate_invitation(token: str, db: Session = Depends(get_db)):
+    """Validar token de invitación y obtener datos"""
+    try:
+        invitation = db.query(Invitation).filter(
+            Invitation.token == token,
+            Invitation.is_used == False,
+            Invitation.expires_at > datetime.utcnow()
+        ).first()
+        
+        if not invitation:
+            raise HTTPException(status_code=400, detail="Token inválido, expirado o ya usado")
+        
+        return {
+            "email": invitation.email,
+            "seller_name": invitation.seller_name,
+            "seller_phone": invitation.seller_phone,
+            "token": token
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error: {str(e)}")
 
-# Agregar después del endpoint anterior:
 
 @app.get("/admin/invitations/", response_model=List[dict])
 def list_invitations(
@@ -1171,8 +1193,8 @@ def list_invitations(
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
     
-# Agregar después del endpoint anterior:
 
 @app.post("/auth/register-with-token/", response_model=dict)
 def register_with_token(
