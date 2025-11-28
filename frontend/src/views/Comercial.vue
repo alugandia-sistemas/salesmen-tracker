@@ -1,427 +1,402 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-    <!-- HEADER -->
-    <header class="bg-white shadow-lg border-b-4 border-indigo-600 sticky top-0 z-50">
-      <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-        <div class="flex items-center gap-4">
-          <div class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-lg">
-            👤 AGENTE
-          </div>
-          <h1 class="text-2xl font-bold text-gray-800">Alugandia - Mi Panel</h1>
-        </div>
-        <div class="text-right">
-          <p class="text-sm text-indigo-600 font-semibold">{{ currentUser?.name || 'Vendedor' }}</p>
-          <p class="text-xs text-gray-500">{{ currentTime }}</p>
-        </div>
-      </div>
-    </header>
-
-    <div class="max-w-7xl mx-auto px-4 py-8">
-      <!-- TAB NAVIGATION -->
-      <div class="flex gap-3 mb-8">
-        <button 
-          v-for="tab in tabs" 
-          :key="tab.id"
-          @click="activeTab = tab.id"
-          :class="[
-            'px-6 py-3 font-semibold rounded-lg transition-all flex items-center gap-2',
-            activeTab === tab.id 
-              ? 'bg-indigo-600 text-white shadow-lg' 
-              : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-indigo-600'
-          ]"
-        >
-          {{ tab.icon }} {{ tab.name }}
-        </button>
-      </div>
-
-      <!-- 1️⃣ DASHBOARD -->
-      <div v-if="activeTab === 'dashboard'" class="space-y-6">
-        <h2 class="text-3xl font-bold text-gray-800">📊 Mi Dashboard</h2>
-        
-        <!-- TARJETA DE USUARIO -->
-        <div class="bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-lg shadow-lg p-8 text-white">
-          <p class="text-indigo-100 text-sm">Operador Activo</p>
-          <p class="text-4xl font-bold mt-2">{{ currentUser?.name }}</p>
-          <p class="text-indigo-200 mt-2">ID: {{ currentUser?.id?.substring(0, 8) }}...</p>
-        </div>
-
-        <!-- MÉTRICAS DE HOY -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-            <p class="text-gray-600 text-sm font-semibold">Visitas Realizadas</p>
-            <p class="text-4xl font-bold text-blue-600 mt-2">{{ myStats.visits_today }}</p>
-            <p class="text-xs text-gray-500 mt-2">Hoy</p>
-          </div>
-
-          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-            <p class="text-gray-600 text-sm font-semibold">✅ Completadas</p>
-            <p class="text-4xl font-bold text-green-600 mt-2">{{ myStats.completed_visits }}</p>
-            <p class="text-xs text-gray-500 mt-2">Con check-in válido</p>
-          </div>
-
-          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-orange-500">
-            <p class="text-gray-600 text-sm font-semibold">⏳ Pendientes</p>
-            <p class="text-4xl font-bold text-orange-600 mt-2">{{ myStats.pending_routes }}</p>
-            <p class="text-xs text-gray-500 mt-2">Por hacer hoy</p>
-          </div>
-        </div>
-
-        <!-- PRÓXIMA RUTA IMPORTANTE -->
-        <div v-if="nextRoute" class="bg-white rounded-lg shadow-lg p-8 border-l-4 border-indigo-600">
-          <h3 class="text-lg font-bold text-gray-800 mb-4">📍 Próxima Ruta</h3>
-          <div class="space-y-3">
-            <div class="flex items-center gap-3">
-              <span class="text-2xl">🕐</span>
-              <div>
-                <p class="text-gray-600 text-sm">Hora</p>
-                <p class="text-lg font-bold text-gray-800">{{ nextRoute.planned_time }}</p>
-              </div>
-            </div>
-            <div class="flex items-center gap-3">
-              <span class="text-2xl">👤</span>
-              <div>
-                <p class="text-gray-600 text-sm">Cliente</p>
-                <p class="text-lg font-bold text-gray-800">{{ nextRoute.client?.name }}</p>
-              </div>
-            </div>
-            <div class="flex items-center gap-3">
-              <span class="text-2xl">📍</span>
-              <div>
-                <p class="text-gray-600 text-sm">Dirección</p>
-                <p class="text-sm text-gray-700">{{ nextRoute.client?.address }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 2️⃣ MIS RUTAS -->
-      <div v-if="activeTab === 'routes'" class="space-y-6">
-        <div class="flex items-center justify-between">
-          <h2 class="text-3xl font-bold text-gray-800">🗓️ Mis Rutas - Próximos 5 Días</h2>
-          <button 
-            @click="loadMyRoutes"
-            class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-semibold"
-          >
-            🔄 Recargar
+  <div class="min-h-screen bg-white">
+    <!-- Header -->
+    <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <div class="px-4 py-4">
+        <div class="flex justify-between items-center">
+          <h1 class="text-2xl font-bold text-gray-900">Alugandia</h1>
+          <button @click="logout" class="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+            Salir
           </button>
         </div>
+        <p class="text-gray-600 text-sm mt-2">App de Vendedor</p>
+      </div>
+    </nav>
 
-        <div v-if="myRoutes.length === 0" class="bg-white rounded-lg p-12 text-center shadow-md">
-          <p class="text-gray-500 text-xl">⏳ Sin rutas para los próximos 5 días</p>
+    <!-- Content -->
+    <div class="px-4 py-6 pb-20">
+      <!-- Greeting -->
+      <h2 class="text-3xl font-bold text-gray-900 mb-6">¡Hola, {{ sellerName }}!</h2>
+
+      <!-- Rutas para hoy -->
+      <div class="mb-8">
+        <h3 class="text-xl font-bold text-gray-900 mb-4">Rutas de hoy</h3>
+        
+        <div v-if="routesHoy.length > 0" class="space-y-3">
+          <div v-for="ruta in routesHoy" :key="ruta.id" class="bg-gray-50 border-2 border-gray-200 rounded-xl p-5">
+            <!-- Cliente -->
+            <div class="flex items-start gap-3 mb-4">
+              <div class="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
+                <span class="text-white font-bold">{{ getNombreCliente(ruta.client_id).charAt(0) }}</span>
+              </div>
+              <div class="flex-1">
+                <h4 class="text-lg font-bold text-gray-900">{{ getNombreCliente(ruta.client_id) }}</h4>
+                <p class="text-gray-600 text-sm">📍 {{ getClienteDireccion(ruta.client_id) }}</p>
+              </div>
+            </div>
+
+            <!-- Status badges -->
+            <div class="flex gap-2 mb-4">
+              <span class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-900">
+                {{ ruta.planned_time }}
+              </span>
+              <span 
+                class="px-3 py-1 rounded-full text-xs font-semibold"
+                :class="ruta.status === 'pending' ? 'bg-orange-200 text-orange-900' : 'bg-green-200 text-green-900'"
+              >
+                {{ ruta.status === 'pending' ? '⏳ Pendiente' : '✅ Completada' }}
+              </span>
+            </div>
+
+            <!-- Check-in Button -->
+            <button 
+              v-if="ruta.status === 'pending'"
+              @click="iniciarCheckin(ruta)" 
+              class="w-full bg-gray-900 text-white py-4 rounded-lg font-semibold text-lg hover:bg-gray-800 transition"
+            >
+              📍 Iniciar Check-in
+            </button>
+            <button 
+              v-else
+              @click="verVisita(ruta.id)"
+              class="w-full bg-gray-100 text-gray-900 py-4 rounded-lg font-semibold text-lg hover:bg-gray-200 transition"
+            >
+              Ver detalles
+            </button>
+          </div>
         </div>
 
-        <!-- LISTA DE RUTAS -->
-        <div class="space-y-4">
-          <div 
-            v-for="route in myRoutes" 
-            :key="route.id"
-            class="bg-white rounded-lg shadow-md border-l-4 transition-all"
-            :class="getRouteVisit(route.id) ? 'border-green-600' : 'border-indigo-600'"
-          >
-            <!-- HEADER DE RUTA -->
-            <div 
-              @click="toggleRouteExpanded(route.id)"
-              class="bg-gray-50 px-6 py-4 cursor-pointer hover:bg-gray-100 flex items-center justify-between border-b border-gray-200"
-            >
-              <div class="flex items-center gap-4 flex-1">
-                <span class="text-2xl">{{ expandedRoutes[route.id] ? '▼' : '▶' }}</span>
-                <div>
-                  <p class="text-gray-900 font-bold text-lg">📅 {{ formatDateShort(route.planned_date) }}</p>
-                  <p class="text-gray-600 text-sm">🕐 {{ route.planned_time }}</p>
-                </div>
-              </div>
-              <div class="text-right">
-                <span v-if="getRouteVisit(route.id)" class="px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800">
-                  ✅ Check-in Realizado
-                </span>
-                <span v-else class="px-3 py-1 rounded-full text-sm font-semibold bg-orange-100 text-orange-800">
-                  ⏳ Pendiente
-                </span>
-              </div>
+        <div v-else class="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center">
+          <p class="text-gray-600 text-sm">Sin rutas para hoy</p>
+        </div>
+      </div>
+
+      <!-- Historial de visitas -->
+      <div>
+        <h3 class="text-xl font-bold text-gray-900 mb-4">Historial de visitas</h3>
+        
+        <div v-if="visitasRecientes.length > 0" class="space-y-3">
+          <div v-for="visita in visitasRecientes" :key="visita.id" class="bg-gray-50 border-2 border-gray-200 rounded-xl p-5">
+            <div class="flex items-start justify-between mb-2">
+              <h4 class="font-bold text-gray-900">{{ getNombreCliente(visita.client_id) }}</h4>
+              <span 
+                class="px-3 py-1 rounded-full text-xs font-semibold"
+                :class="visita.checkin_is_valid ? 'bg-green-200 text-green-900' : 'bg-red-200 text-red-900'"
+              >
+                {{ visita.checkin_is_valid ? '✅ Válido' : '❌ Inválido' }}
+              </span>
             </div>
-
-            <!-- CONTENIDO EXPANDIDO: CLIENTE -->
-            <div v-if="expandedRoutes[route.id]" class="px-6 py-6 space-y-4 bg-gray-50 border-t border-gray-200">
-              <!-- INFO DEL CLIENTE -->
-              <div class="bg-white rounded-lg p-6 border-2 border-indigo-200">
-                <div class="flex items-start gap-4">
-                  <div class="text-4xl">📍</div>
-                  <div class="flex-1">
-                    <p class="text-gray-900 font-bold text-lg">{{ route.client?.name }}</p>
-                    <p class="text-gray-600 mt-2">{{ route.client?.address }}</p>
-                    <div class="flex gap-3 mt-4 flex-wrap">
-                      <a 
-                        :href="`tel:${route.client?.phone}`"
-                        class="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-semibold"
-                      >
-                        📞 {{ route.client?.phone }}
-                      </a>
-                      <span class="text-sm bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full">
-                        {{ route.client?.client_type }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- ESTADO DEL CHECK-IN -->
-              <div v-if="getRouteVisit(route.id)" class="bg-green-50 rounded-lg p-4 border border-green-300">
-                <p class="text-green-800 font-semibold">✅ Check-in ya registrado</p>
-                <p class="text-green-700 text-sm mt-1">{{ formatTime(getRouteVisit(route.id).checkin_time) }}</p>
-                <div v-if="getRouteVisit(route.id).checkin_distance_meters" class="mt-3">
-                  <p class="text-green-700 text-sm">Distancia: {{ getRouteVisit(route.id).checkin_distance_meters.toFixed(0) }}m ✅</p>
-                </div>
-              </div>
-
-              <!-- BOTÓN CHECK-IN O COMPLETAR -->
-              <div v-if="!getRouteVisit(route.id)" class="space-y-3">
-                <button 
-                  @click="openCheckInModal(route)"
-                  class="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 py-4 rounded-lg font-bold text-lg flex items-center justify-center gap-2 shadow-md"
-                >
-                  ✅ Registrar Llegada (Check-in)
-                </button>
-              </div>
-
-              <div v-else class="space-y-3">
-                <p class="text-gray-700 text-sm text-center">
-                  Ya registraste la llegada a este cliente.
-                </p>
-                <button 
-                  @click="completeRoute(route.id)"
-                  class="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2"
-                >
-                  🎉 Marcar como Completado
-                </button>
-              </div>
-            </div>
+            <p class="text-gray-600 text-sm mb-2">{{ formatDate(visita.checkin_time) }}</p>
+            <p class="text-gray-700 text-sm">📍 Distancia: {{ visita.checkin_distance_meters.toFixed(1) }}m</p>
+            <p v-if="visita.checkin_validation_error" class="text-red-600 text-sm mt-2">
+              ⚠️ {{ visita.checkin_validation_error }}
+            </p>
           </div>
+        </div>
+
+        <div v-else class="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center">
+          <p class="text-gray-600 text-sm">Sin visitas registradas</p>
         </div>
       </div>
     </div>
 
     <!-- MODAL CHECK-IN -->
-    <CheckInModal 
-      v-if="showCheckInModal"
-      :route="selectedRoute"
-      @close="showCheckInModal = false"
-      @success="onCheckInSuccess"
-    />
+    <div v-if="showCheckinModal" class="fixed inset-0 bg-black/40 flex items-end z-50">
+      <div class="w-full bg-white rounded-t-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <h3 class="text-2xl font-bold text-gray-900 mb-6">
+          Check-in: {{ getNombreCliente(rutaActual.client_id) }}
+        </h3>
 
-    <!-- NOTIFICACIÓN DE ÉXITO -->
-    <div 
-      v-if="showSuccessNotification"
-      class="fixed bottom-4 right-4 bg-green-100 border-2 border-green-500 text-green-800 px-6 py-4 rounded-lg shadow-lg font-semibold flex items-center gap-2"
-    >
-      ✅ {{ successMessage }}
+        <!-- Mapa o información de ubicación -->
+        <div class="bg-gray-100 rounded-lg p-4 mb-6 text-center">
+          <p class="text-gray-600 text-sm mb-4">📍 Esperando ubicación...</p>
+          <div v-if="ubicacionActual" class="text-left space-y-2">
+            <p class="text-gray-900 font-semibold">Ubicación detectada:</p>
+            <p class="text-gray-700 text-sm">Latitud: {{ ubicacionActual.latitude.toFixed(5) }}</p>
+            <p class="text-gray-700 text-sm">Longitud: {{ ubicacionActual.longitude.toFixed(5) }}</p>
+            <p class="text-gray-700 text-sm">Precisión: ±{{ ubicacionActual.accuracy.toFixed(0) }}m</p>
+          </div>
+          <div v-else class="text-gray-500 text-sm">
+            <p>Permitir acceso a ubicación</p>
+            <p class="text-xs mt-2">La app necesita tu GPS</p>
+          </div>
+        </div>
+
+        <!-- Cliente encontrado -->
+        <div class="mb-6">
+          <label class="flex items-center gap-4 p-4 border-2 border-gray-300 rounded-lg cursor-pointer hover:border-gray-900">
+            <input 
+              v-model="clienteEncontrado" 
+              type="checkbox" 
+              class="w-6 h-6 accent-gray-900"
+            />
+            <span class="text-gray-900 font-semibold">✓ Cliente confirmado en la ubicación</span>
+          </label>
+        </div>
+
+        <!-- Notas -->
+        <div class="mb-6">
+          <label class="block text-sm font-semibold text-gray-900 mb-2">Notas (opcional)</label>
+          <textarea 
+            v-model="notasCheckin" 
+            placeholder="Ej: Cliente no estaba disponible..."
+            class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 text-sm"
+            rows="3"
+          ></textarea>
+        </div>
+
+        <!-- Botones -->
+        <div class="flex gap-3">
+          <button 
+            @click="cerrarModal()"
+            class="flex-1 bg-gray-100 text-gray-900 py-4 rounded-lg font-semibold text-lg hover:bg-gray-200 transition"
+          >
+            Cancelar
+          </button>
+          <button 
+            @click="hacerCheckin()"
+            :disabled="!ubicacionActual"
+            class="flex-1 bg-gray-900 text-white py-4 rounded-lg font-semibold text-lg hover:bg-gray-800 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            {{ cargandoCheckin ? '⏳ Guardando...' : '📍 Confirmar Check-in' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULTADO CHECK-IN -->
+    <div v-if="showResultado" class="fixed inset-0 bg-black/40 flex items-end z-50">
+      <div class="w-full bg-white rounded-t-2xl p-6 shadow-2xl">
+        <div class="text-center">
+          <div class="text-5xl mb-4">{{ resultadoCheckin.is_valid ? '✅' : '⚠️' }}</div>
+          <h3 class="text-2xl font-bold text-gray-900 mb-2">
+            {{ resultadoCheckin.is_valid ? 'Check-in Válido' : 'Check-in con Advertencias' }}
+          </h3>
+          <p class="text-gray-600 text-lg mb-6">
+            {{ resultadoCheckin.message }}
+          </p>
+
+          <!-- Distancia -->
+          <div class="bg-gray-50 rounded-lg p-4 mb-6 text-center">
+            <p class="text-gray-600 text-sm">Distancia al cliente</p>
+            <p class="text-3xl font-bold text-gray-900">{{ resultadoCheckin.distance_meters.toFixed(1) }}m</p>
+          </div>
+
+          <!-- Errores/Advertencias -->
+          <div v-if="resultadoCheckin.validation_error" class="bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-6 text-left">
+            <p class="text-red-900 font-semibold text-sm">⚠️ {{ resultadoCheckin.validation_error }}</p>
+          </div>
+
+          <div v-if="resultadoCheckin.fraud_flags && resultadoCheckin.fraud_flags.length > 0" class="bg-orange-50 border-2 border-orange-200 rounded-lg p-4 mb-6 text-left">
+            <p class="text-orange-900 font-semibold text-sm mb-2">🚨 Alertas detectadas:</p>
+            <ul class="text-orange-900 text-sm space-y-1">
+              <li v-for="flag in resultadoCheckin.fraud_flags" :key="flag">• {{ flag }}</li>
+            </ul>
+          </div>
+
+          <!-- Botones -->
+          <div class="flex gap-3">
+            <button 
+              @click="cerrarResultado()"
+              class="flex-1 bg-gray-900 text-white py-4 rounded-lg font-semibold text-lg hover:bg-gray-800 transition"
+            >
+              {{ resultadoCheckin.is_valid ? 'Continuar' : 'Aceptar' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onMounted } from 'vue'
-import CheckInModal from '../components/CheckInModal.vue'
-
-const API_URL = 'http://localhost:8000'
-//const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
-// ============================================================================
-// ESTADO REACTIVO
-// ============================================================================
-
-const activeTab = ref('dashboard')
-const currentTime = ref('')
-const currentUser = ref(null)
-
-const tabs = [
-  { id: 'dashboard', name: 'Mi Dashboard', icon: '📊' },
-  { id: 'routes', name: 'Mis Rutas', icon: '🗓️' }
-]
-
-const myStats = ref({
-  visits_today: 0,
-  completed_visits: 0,
-  pending_routes: 0
-})
-
-const myRoutes = ref([])
-const allVisits = ref([])
-const expandedRoutes = ref({})
-const showCheckInModal = ref(false)
-const selectedRoute = ref(null)
-const showSuccessNotification = ref(false)
-const successMessage = ref('')
-
-// ============================================================================
-// COMPUTED
-// ============================================================================
-
-const nextRoute = computed(() => {
-  if (myRoutes.value.length === 0) return null
-  return myRoutes.value[0]
-})
-
-// ============================================================================
-// FUNCIONES
-// ============================================================================
-
-const formatTime = (timestamp) => {
-  if (!timestamp) return '-'
-  const date = new Date(timestamp)
-  return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-}
-
-const formatDateShort = (timestamp) => {
-  if (!timestamp) return '-'
-  const date = new Date(timestamp)
-  return date.toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric' })
-}
-
-const toggleRouteExpanded = (routeId) => {
-  expandedRoutes.value[routeId] = !expandedRoutes.value[routeId]
-}
-
-const getRouteVisit = (routeId) => {
-  return allVisits.value.find(v => v.route_id === routeId && v.checkin_time)
-}
-
-const openCheckInModal = (route) => {
-  selectedRoute.value = route
-  showCheckInModal.value = true
-}
-
-const completeRoute = async (routeId) => {
-  try {
-    // Marcar ruta como completada
-    const response = await fetch(`${API_URL}/routes/${routeId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'completed' })
-    })
-
-    if (response.ok) {
-      showSuccessNotification.value = true
-      successMessage.value = '🎉 Ruta marcada como completada'
-      setTimeout(() => {
-        showSuccessNotification.value = false
-      }, 3000)
+<script>
+export default {
+  name: 'Comercial',
+  data() {
+    return {
+      sellerName: 'Vendedor',
+      routesHoy: [],
+      visitasRecientes: [],
+      clientes: [],
       
-      await loadMyRoutes()
+      showCheckinModal: false,
+      showResultado: false,
+      rutaActual: null,
+      
+      ubicacionActual: null,
+      clienteEncontrado: false,
+      notasCheckin: '',
+      cargandoCheckin: false,
+      
+      resultadoCheckin: null,
+      geoWatcher: null
     }
-  } catch (error) {
-    console.error('Error completando ruta:', error)
+  },
+  mounted() {
+    this.fetchRutasHoy()
+    this.fetchVisitas()
+    this.fetchClientes()
+    this.iniciarGPS()
+  },
+  beforeUnmount() {
+    if (this.geoWatcher) {
+      navigator.geolocation.clearWatch(this.geoWatcher)
+    }
+  },
+  methods: {
+    async fetchRutasHoy() {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/routes/`)
+        const todas = await response.json()
+        
+        // Filtrar por hoy
+        const hoy = new Date().toISOString().split('T')[0]
+        this.routesHoy = todas.filter(r => r.planned_date.split('T')[0] === hoy)
+      } catch (e) {
+        console.error('Error:', e)
+      }
+    },
+    async fetchVisitas() {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/visits/`)
+        this.visitasRecientes = await response.json()
+      } catch (e) {
+        console.error('Error:', e)
+      }
+    },
+    async fetchClientes() {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/`)
+        this.clientes = await response.json()
+      } catch (e) {
+        console.error('Error:', e)
+      }
+    },
+    
+    iniciarGPS() {
+      if (!navigator.geolocation) {
+        alert('Geolocalización no disponible en tu dispositivo')
+        return
+      }
+      
+      // Obtener ubicación inicial
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          this.ubicacionActual = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          }
+        },
+        (error) => {
+          console.error('GPS error:', error.message)
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      )
+      
+      // Monitorear cambios de ubicación
+      this.geoWatcher = navigator.geolocation.watchPosition(
+        (position) => {
+          this.ubicacionActual = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          }
+        },
+        (error) => {
+          console.error('GPS watch error:', error.message)
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      )
+    },
+    
+    iniciarCheckin(ruta) {
+      this.rutaActual = ruta
+      this.clienteEncontrado = false
+      this.notasCheckin = ''
+      this.showCheckinModal = true
+    },
+    
+    async hacerCheckin() {
+      if (!this.ubicacionActual) {
+        alert('Ubicación no disponible')
+        return
+      }
+      
+      this.cargandoCheckin = true
+      
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/visits/checkin/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            route_id: this.rutaActual.id,
+            seller_id: this.rutaActual.seller_id,
+            client_id: this.rutaActual.client_id,
+            latitude: this.ubicacionActual.latitude,
+            longitude: this.ubicacionActual.longitude,
+            client_found: this.clienteEncontrado,
+            notes: this.notasCheckin || null
+          })
+        })
+        
+        this.resultadoCheckin = await response.json()
+        this.showCheckinModal = false
+        this.showResultado = true
+        this.fetchVisitas()
+      } catch (e) {
+        console.error('Error en check-in:', e)
+        alert('Error al hacer check-in')
+      } finally {
+        this.cargandoCheckin = false
+      }
+    },
+    
+    cerrarModal() {
+      this.showCheckinModal = false
+      this.rutaActual = null
+      this.clienteEncontrado = false
+      this.notasCheckin = ''
+    },
+    
+    cerrarResultado() {
+      this.showResultado = false
+      this.resultadoCheckin = null
+    },
+    
+    getNombreCliente(id) {
+      const c = this.clientes.find(x => x.id === id)
+      return c ? c.name : 'Desconocido'
+    },
+    
+    getClienteDireccion(id) {
+      const c = this.clientes.find(x => x.id === id)
+      return c ? c.address : 'Sin dirección'
+    },
+    
+    formatDate(date) {
+      return new Date(date).toLocaleDateString('es-ES', { 
+        month: 'short', 
+        day: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      })
+    },
+    
+    verVisita(rutaId) {
+      // TODO: Ver detalles de visita
+    },
+    
+    logout() {
+      localStorage.removeItem('token')
+      this.$router.push('/login')
+    }
   }
 }
-
-const updateTime = () => {
-  const now = new Date()
-  currentTime.value = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
-
-// ============================================================================
-// CARGAR DATOS
-// ============================================================================
-
-const loadCurrentUser = async () => {
-  try {
-    const response = await fetch(`${API_URL}/sellers/`)
-    const sellers = await response.json()
-    
-    if (sellers.length > 0) {
-      currentUser.value = sellers[0]
-    }
-  } catch (error) {
-    console.error('Error cargando usuario:', error)
-  }
-}
-
-const loadMyRoutes = async () => {
-  try {
-    if (!currentUser.value?.id) {
-      console.warn('Sin usuario actual')
-      return
-    }
-
-    const response = await fetch(`${API_URL}/routes/?seller_id=${currentUser.value.id}`)
-    const data = await response.json()
-    
-    // Filtrar rutas de los próximos 5 días
-    const now = new Date()
-    const fiveDaysLater = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000)
-    
-    myRoutes.value = data.filter(route => {
-      const routeDate = new Date(route.planned_date)
-      return routeDate >= now && routeDate <= fiveDaysLater
-    }).sort((a, b) => new Date(a.planned_date) - new Date(b.planned_date))
-
-    // Cargar visitas de estas rutas
-    await loadMyVisits()
-  } catch (error) {
-    console.error('Error cargando rutas:', error)
-  }
-}
-
-const loadMyVisits = async () => {
-  try {
-    if (!currentUser.value?.id) return
-
-    const response = await fetch(`${API_URL}/visits/?seller_id=${currentUser.value.id}`)
-    const data = await response.json()
-    allVisits.value = data || []
-
-    // Calcular estadísticas
-    const today = new Date().toDateString()
-    const visitasHoy = allVisits.value.filter(v => 
-      new Date(v.checkin_time).toDateString() === today
-    )
-    
-    myStats.value = {
-      visits_today: visitasHoy.length,
-      completed_visits: visitasHoy.filter(v => v.checkin_is_valid).length,
-      pending_routes: myRoutes.value.filter(r => !getRouteVisit(r.id)).length
-    }
-  } catch (error) {
-    console.error('Error cargando visitas:', error)
-  }
-}
-
-const onCheckInSuccess = () => {
-  showCheckInModal.value = false
-  showSuccessNotification.value = true
-  successMessage.value = '✅ Check-in registrado correctamente'
-  
-  setTimeout(() => {
-    showSuccessNotification.value = false
-  }, 3000)
-  
-  loadMyRoutes()
-}
-
-// ============================================================================
-// LIFECYCLE
-// ============================================================================
-
-onMounted(async () => {
-  // check
-  console.log('🚀 onMounted ejecutándose...')
-  // check
-  updateTime()
-  setInterval(updateTime, 1000)
-  
-  await loadCurrentUser()
-  await loadMyRoutes()
-  
-  // Recargar cada 60 segundos
-  setInterval(loadMyRoutes, 60000)
-
-  console.log('✅ Rutas cargadas:', myRoutes.value)
-  // check
-})
 </script>
 
 <style scoped>
 * {
-  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+  -webkit-font-smoothing: antialiased;
 }
 </style>
