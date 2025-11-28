@@ -4,6 +4,8 @@ import Login from '../views/Login.vue'
 import Registro from '../views/Registro.vue'
 import Comercial from '../views/Comercial.vue'
 import AdminGestion from '../views/AdminGestion.vue'
+import AdminInvitaciones from '../views/AdminInvitaciones.vue'
+import RegistroConToken from '../views/RegistroConToken.vue'
 
 const routes = [
   // Auth
@@ -36,7 +38,19 @@ const routes = [
   { 
     path: '/', 
     redirect: '/comercial' 
-  }
+  },
+
+ // Invitation-based Registration
+  {
+    path: '/admin/invitaciones',
+    component: AdminInvitaciones,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/registro',
+    component: RegistroConToken,
+    meta: { requiresAuth: false }
+  } 
 ]
 
 const router = createRouter({

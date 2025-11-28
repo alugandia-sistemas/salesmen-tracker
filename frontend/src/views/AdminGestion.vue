@@ -27,6 +27,14 @@
         >
           👥 Vendedores
         </button>
+
+        <button 
+          @click="$router.push('/admin/invitaciones')"
+          class="px-4 py-4 font-semibold text-sm border-b-2 border-transparent text-gray-600 hover:text-gray-900 transition whitespace-nowrap"
+        >
+          📧 Invitaciones
+        </button>
+        
         <button 
           @click="activeTab = 'clientes'"
           :class="[

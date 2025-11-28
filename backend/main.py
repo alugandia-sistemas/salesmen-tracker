@@ -13,6 +13,8 @@ import os
 import shutil
 from pathlib import Path
 import math
+# Agregar secrets:
+import secrets
 
 # ============================================================================
 # CONFIGURACIÓN Y CONEXIÓN BD
@@ -168,6 +170,22 @@ class Route(Base):
     client = relationship("Client", back_populates="routes")
     visits = relationship("Visit", back_populates="route")
 
+# Invitation. Para gestionar invitaciones a nuevos vendedores.
+# Buscar en main.py dónde están los modelos (alrededor de línea 100-200)
+# Agregar después del modelo Route:
+class Invitation(Base):
+    __tablename__ = "invitations"
+    
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    token = Column(String(255), unique=True, nullable=False)
+    email = Column(String(255), nullable=False)
+    seller_name = Column(String(255), nullable=False)
+    seller_phone = Column(String(20), nullable=False)
+    is_used = Column(Boolean, default=False)
+    expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(days=7))
+    created_by = Column(PG_UUID(as_uuid=True), nullable=True) # ID del admin que creó la invitación
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
 
 class Visit(Base):
     __tablename__ = "visits"
@@ -409,6 +427,26 @@ class RouteResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# Invitation Schemas
+# Buscar dónde están los schemas (BaseModel)
+# Agregar estos al final antes de los endpoints:
+class InvitationCreate(BaseModel):
+    email: str
+    seller_name: str
+    seller_phone: str
+
+class InvitationResponse(BaseModel):
+    id: str
+    token: str
+    email: str
+    seller_name: str
+    seller_phone: str
+    is_used: bool
+    expires_at: datetime
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
 
 # ============================================================================
 # FUNCIONES GEOESPACIALES (PostGIS + Validación)
@@ -1055,6 +1093,146 @@ def delete_route(route_id: str, db: Session = Depends(get_db)):
     
     return {"id": str(route.id), "message": "Ruta eliminada"}
 
+
+# --- INVITACIONES ---
+# Agregar DESPUÉS del endpoint DELETE de routes (alrededor de línea 1050)
+
+@app.post("/admin/invitations/", response_model=dict)
+def create_invitation(
+    request: InvitationCreate,
+    db: Session = Depends(get_db),
+    admin_id: Optional[str] = None  # En producción, verificar que sea admin
+):
+    """Admin genera invitación para nuevo vendedor"""
+    try:
+        # Generar token único
+        token = secrets.token_urlsafe(32)
+        
+        # created_by es OPCIONAL (puede ser None)
+        # en Producción, extraer admin_id del token JWT o Ya veremos
+        created_by_uuid = None
+        if admin_id:
+            try:
+                created_by_uuid = uuid.UUID(admin_id)
+            except ValueError:
+                pass  # Si es inválido, dejar como None
+        
+        # Crear invitación
+        invitation = Invitation(
+            token=token,
+            email=request.email,
+            seller_name=request.seller_name,
+            seller_phone=request.seller_phone,
+            created_by=created_by_uuid
+        )
+        
+        db.add(invitation)
+        db.commit()
+        db.refresh(invitation)
+        
+        return {
+            "id": str(invitation.id),
+            "token": token,
+            "email": invitation.email,
+            "seller_name": invitation.seller_name,
+            "seller_phone": invitation.seller_phone,
+            "expires_at": invitation.expires_at.isoformat(),
+            "message": "Invitación creada. Envía el link al vendedor."
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error: {str(e)}")
+   
+
+# Agregar después del endpoint anterior:
+
+@app.get("/admin/invitations/", response_model=List[dict])
+def list_invitations(
+    db: Session = Depends(get_db),
+    admin_id: Optional[str] = None
+):
+    """Admin ve todas sus invitaciones"""
+    try:
+        invitations = db.query(Invitation).order_by(Invitation.created_at.desc()).all()
+        
+        result = []
+        for inv in invitations:
+            result.append({
+                "id": str(inv.id),
+                "token": inv.token,
+                "email": inv.email,
+                "seller_name": inv.seller_name,
+                "seller_phone": inv.seller_phone,
+                "is_used": inv.is_used,
+                "expires_at": inv.expires_at.isoformat(),
+                "created_at": inv.created_at.isoformat()
+            })
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+# Agregar después del endpoint anterior:
+
+@app.post("/auth/register-with-token/", response_model=dict)
+def register_with_token(
+    token: str,
+    password: str,
+    db: Session = Depends(get_db)
+):
+    """Vendedor se registra usando token de invitación"""
+    try:
+        # Validar token
+        invitation = db.query(Invitation).filter(
+            Invitation.token == token,
+            Invitation.is_used == False,
+            Invitation.expires_at > datetime.utcnow()
+        ).first()
+        
+        if not invitation:
+            raise HTTPException(status_code=400, detail="Token inválido, expirado o ya usado")
+        
+        # Validar que no exista seller con ese email
+        existing = db.query(Seller).filter(
+            Seller.email == invitation.email
+        ).first()
+        
+        if existing:
+            raise HTTPException(status_code=400, detail="Email ya registrado")
+        
+        # Crear seller
+        seller = Seller(
+            name=invitation.seller_name,
+            email=invitation.email,
+            phone=invitation.seller_phone,
+            is_active=True
+        )
+        
+        db.add(seller)
+        db.flush()  # Para obtener el ID
+        
+        # Marcar invitación como usada
+        invitation.is_used = True
+        
+        db.commit()
+        db.refresh(seller)
+        
+        return {
+            "id": str(seller.id),
+            "name": seller.name,
+            "email": seller.email,
+            "phone": seller.phone,
+            "is_active": seller.is_active,
+            "message": "Registro exitoso. Ya puedes iniciar sesión."
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error: {str(e)}")
+    
+ 
 
 # ============================================================================
 # ✅ CHECK-IN/CHECK-OUT REDISEÑADO CON VALIDACIÓN ROBUSTA
