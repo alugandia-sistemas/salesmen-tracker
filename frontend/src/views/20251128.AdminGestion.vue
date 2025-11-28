@@ -210,24 +210,12 @@
           {{ editingVendedor ? 'Editar Vendedor' : 'Nuevo Vendedor' }}
         </h3>
         <form @submit.prevent="saveVendedor" class="space-y-5">
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Nombre</label>
-            <input v-model="formVendedor.name" type="text" placeholder="Ej: Ernesto Arocas" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Email</label>
-            <input v-model="formVendedor.email" type="email" placeholder="ernesto@alugandia.com" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Teléfono</label>
-            <input v-model="formVendedor.phone" type="tel" placeholder="+34 600 123 456" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-          </div>
-
-          <div class="flex items-center gap-3 py-2">
+          <input v-model="formVendedor.name" type="text" placeholder="Nombre" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+          <input v-model="formVendedor.email" type="email" placeholder="Email" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+          <input v-model="formVendedor.phone" type="tel" placeholder="Teléfono" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+          <div class="flex items-center gap-3">
             <input v-model="formVendedor.is_active" type="checkbox" id="vendedor-active" class="w-5 h-5 accent-gray-900" />
-            <label for="vendedor-active" class="text-gray-900 font-semibold">Vendedor Activo</label>
+            <label for="vendedor-active" class="text-gray-900 font-semibold">Activo</label>
           </div>
           <div class="flex gap-3 pt-6 border-t border-gray-200">
             <button type="button" @click="closeVendedorModal()" class="flex-1 bg-gray-100 text-gray-900 py-4 rounded-lg font-semibold text-lg hover:bg-gray-200 transition">
@@ -248,57 +236,18 @@
           {{ editingCliente ? 'Editar Cliente' : 'Nuevo Cliente' }}
         </h3>
         <form @submit.prevent="saveCliente" class="space-y-5">
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Nombre del Cliente</label>
-            <input v-model="formCliente.name" type="text" placeholder="Ej: Cerrajería García" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Dirección</label>
-            <input v-model="formCliente.address" type="text" placeholder="Ej: Calle Principal 123, Real de Gandia" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Teléfono</label>
-            <input v-model="formCliente.phone" type="tel" placeholder="+34 600 123 456" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Email</label>
-            <input v-model="formCliente.email" type="email" placeholder="info@cliente.com" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" />
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Tipo de Cliente</label>
-            <select v-model="formCliente.client_type" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
-              <option value="">-- Selecciona tipo --</option>
-              <option value="carpenter">Carpintero</option>
-              <option value="installer">Instalador</option>
-              <option value="industrial">Industrial</option>
-            </select>
-          </div>
-
-          <!-- GEOLOCALIZACIÓN -->
-          <div class="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mt-6 mb-4">
-            <h4 class="font-bold text-blue-900 text-sm mb-2">📍 Geolocalización (PostGIS)</h4>
-            <p class="text-blue-800 text-xs mb-3">Necesario para check-in geolocalizado de vendedores</p>
-
-            <div>
-              <label class="block text-sm font-semibold text-gray-900 mb-2">Latitud</label>
-              <input v-model.number="formCliente.latitude" type="number" placeholder="39.2000" step="0.0001" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-              <p class="text-gray-500 text-xs mt-1">Ej: 39.2000 (Real de Gandia)</p>
-            </div>
-
-            <div class="mt-3">
-              <label class="block text-sm font-semibold text-gray-900 mb-2">Longitud</label>
-              <input v-model.number="formCliente.longitude" type="number" placeholder="-0.1500" step="0.0001" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-              <p class="text-gray-500 text-xs mt-1">Ej: -0.1500 (Real de Gandia)</p>
-            </div>
-
-            <p class="text-gray-600 text-xs mt-3 bg-gray-100 p-2 rounded">
-              💡 Tip: Obtén coordenadas en Google Maps → Click derecho → Copiar coordenadas
-            </p>
-          </div>
+          <input v-model="formCliente.name" type="text" placeholder="Nombre" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+          <input v-model="formCliente.address" type="text" placeholder="Dirección" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+          <input v-model="formCliente.phone" type="tel" placeholder="Teléfono" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+          <input v-model="formCliente.email" type="email" placeholder="Email" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" />
+          <input v-model.number="formCliente.latitude" type="number" placeholder="Latitud" step="0.0001" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+          <input v-model.number="formCliente.longitude" type="number" placeholder="Longitud" step="0.0001" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+          <select v-model="formCliente.client_type" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
+            <option value="">Tipo de cliente</option>
+            <option value="carpenter">Carpintero</option>
+            <option value="installer">Instalador</option>
+            <option value="industrial">Industrial</option>
+          </select>
           <div class="flex gap-3 pt-6 border-t border-gray-200">
             <button type="button" @click="closeClienteModal()" class="flex-1 bg-gray-100 text-gray-900 py-4 rounded-lg font-semibold text-lg hover:bg-gray-200 transition">
               Cancelar
@@ -318,43 +267,22 @@
           {{ editingRuta ? 'Editar Ruta' : 'Nueva Ruta' }}
         </h3>
         <form @submit.prevent="saveRuta" class="space-y-5">
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Vendedor</label>
-            <select v-model="formRuta.seller_id" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
-              <option value="">-- Selecciona vendedor --</option>
-              <option v-for="v in vendedores" :key="v.id" :value="v.id">{{ v.name }}</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Cliente</label>
-            <select v-model="formRuta.client_id" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
-              <option value="">-- Selecciona cliente --</option>
-              <option v-for="c in clientes" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Fecha y Hora Planificada</label>
-            <input v-model="formRuta.planned_date" type="datetime-local" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-            <p class="text-gray-500 text-xs mt-1">Ej: 2025-11-28 14:00</p>
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Hora de Visita</label>
-            <input v-model="formRuta.planned_time" type="time" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-            <p class="text-gray-500 text-xs mt-1">Ej: 14:00</p>
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Estado de la Ruta</label>
-            <select v-model="formRuta.status" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
-              <option value="pending">⏳ Pendiente</option>
-              <option value="in_progress">🚀 En Progreso</option>
-              <option value="completed">✅ Completada</option>
-              <option value="cancelled">❌ Cancelada</option>
-            </select>
-          </div>
+          <select v-model="formRuta.seller_id" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
+            <option value="">Selecciona vendedor</option>
+            <option v-for="v in vendedores" :key="v.id" :value="v.id">{{ v.name }}</option>
+          </select>
+          <select v-model="formRuta.client_id" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
+            <option value="">Selecciona cliente</option>
+            <option v-for="c in clientes" :key="c.id" :value="c.id">{{ c.name }}</option>
+          </select>
+          <input v-model="formRuta.planned_date" type="datetime-local" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+          <input v-model="formRuta.planned_time" type="time" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+          <select v-model="formRuta.status" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
+            <option value="pending">Pendiente</option>
+            <option value="in_progress">En Progreso</option>
+            <option value="completed">Completada</option>
+            <option value="cancelled">Cancelada</option>
+          </select>
           <div class="flex gap-3 pt-6 border-t border-gray-200">
             <button type="button" @click="closeRutaModal()" class="flex-1 bg-gray-100 text-gray-900 py-4 rounded-lg font-semibold text-lg hover:bg-gray-200 transition">
               Cancelar
