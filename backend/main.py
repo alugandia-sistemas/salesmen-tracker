@@ -76,7 +76,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # ============================================================================
 # INICIALIZACIÓN CON RETRY AUTOMÁTICO
 # ============================================================================
@@ -159,8 +158,7 @@ class Route(Base):
     seller_id = Column(PG_UUID(as_uuid=True), ForeignKey("sellers.id"), nullable=False)
     client_id = Column(PG_UUID(as_uuid=True), ForeignKey("clients.id"), nullable=False)
     
-    planned_date = Column(DateTime, nullable=False)
-    planned_time = Column(String(5), nullable=False)  # HH:MM
+    planned_date = Column(DateTime, nullable=False)  # Solo fecha (hora se obtiene en check-in)
     status = Column(String(20), default="pending")  # pending, in_progress, completed, cancelled
     
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -379,8 +377,7 @@ class RouteCreateRequest(BaseModel):
     """Modelo para crear ruta"""
     seller_id: str
     client_id: str
-    planned_date: str  # YYYY-MM-DD
-    planned_time: str  # HH:MM
+    planned_date: str  # YYYY-MM-DD (solo fecha)
     status: Optional[str] = "pending"
     
     class Config:
@@ -392,7 +389,6 @@ class RouteUpdateRequest(BaseModel):
     seller_id: Optional[str] = None
     client_id: Optional[str] = None
     planned_date: Optional[str] = None
-    planned_time: Optional[str] = None
     status: Optional[str] = None
     
     class Config:
@@ -405,7 +401,6 @@ class RouteResponse(BaseModel):
     seller_id: str
     client_id: str
     planned_date: datetime
-    planned_time: str
     status: str
     created_at: datetime
     client: Optional[ClientResponse] = None
@@ -900,7 +895,6 @@ def list_routes(
             "seller_id": str(route.seller_id),
             "client_id": str(route.client_id),
             "planned_date": route.planned_date,
-            "planned_time": route.planned_time,
             "status": route.status,
             "created_at": route.created_at,
             "seller": {
@@ -958,7 +952,7 @@ def create_route(
     request: RouteCreateRequest,
     db: Session = Depends(get_db)
 ):
-    """Crear ruta"""
+    """Crear ruta - solo fecha, hora se registra en check-in"""
     try:
         seller_uuid = uuid.UUID(request.seller_id)
         client_uuid = uuid.UUID(request.client_id)
@@ -966,11 +960,13 @@ def create_route(
         raise HTTPException(status_code=400, detail=f"IDs inválidos: {str(e)}")
     
     try:
+        # Convertir YYYY-MM-DD a DateTime (00:00:00)
+        planned_date = datetime.strptime(request.planned_date, "%Y-%m-%d")
+        
         route = Route(
             seller_id=seller_uuid,
             client_id=client_uuid,
-            planned_date=datetime.fromisoformat(f"{request.planned_date}T{request.planned_time}:00"),
-            planned_time=request.planned_time,
+            planned_date=planned_date,
             status=request.status
         )
         
@@ -983,11 +979,11 @@ def create_route(
             "seller_id": str(route.seller_id),
             "client_id": str(route.client_id),
             "planned_date": route.planned_date.isoformat(),
-            "planned_time": route.planned_time,
             "status": route.status,
             "message": "Ruta creada correctamente"
         }
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=400, detail=f"Error al crear ruta: {str(e)}")
 
 
@@ -1020,9 +1016,11 @@ def update_route(
         except ValueError:
             raise HTTPException(status_code=400, detail=f"client_id inválido: {request.client_id}")
     
-    if request.planned_date and request.planned_time:
-        route.planned_date = datetime.fromisoformat(f"{request.planned_date}T{request.planned_time}:00")
-        route.planned_time = request.planned_time
+    if request.planned_date:
+        try:
+            route.planned_date = datetime.strptime(request.planned_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"planned_date inválido: {request.planned_date}")
     
     if request.status:
         route.status = request.status
@@ -1035,7 +1033,6 @@ def update_route(
         "seller_id": str(route.seller_id),
         "client_id": str(route.client_id),
         "planned_date": route.planned_date.isoformat(),
-        "planned_time": route.planned_time,
         "status": route.status,
         "message": "Ruta actualizada"
     }

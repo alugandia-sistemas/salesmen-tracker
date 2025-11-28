@@ -181,7 +181,6 @@
             </div>
             <div class="space-y-2 mb-4">
               <p class="text-gray-700 text-sm">📅 {{ formatDate(ruta.planned_date) }}</p>
-              <p class="text-gray-700 text-sm">⏰ {{ ruta.planned_time }}</p>
             </div>
             <div class="flex gap-2">
               <button @click="editRuta(ruta)" class="flex-1 bg-gray-100 text-gray-900 py-3 rounded-lg font-semibold text-sm hover:bg-gray-200 transition">
@@ -335,15 +334,9 @@
           </div>
 
           <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Fecha y Hora Planificada</label>
-            <input v-model="formRuta.planned_date" type="datetime-local" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-            <p class="text-gray-500 text-xs mt-1">Ej: 2025-11-28 14:00</p>
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Hora de Visita</label>
-            <input v-model="formRuta.planned_time" type="time" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-            <p class="text-gray-500 text-xs mt-1">Ej: 14:00</p>
+            <label class="block text-sm font-semibold text-gray-900 mb-2">Fecha de la Ruta</label>
+            <input v-model="formRuta.planned_date" type="date" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+            <p class="text-gray-500 text-xs mt-1">Ej: 2025-12-02</p>
           </div>
 
           <div>
@@ -389,7 +382,7 @@ export default {
       
       formVendedor: { name: '', email: '', phone: '', is_active: true },
       formCliente: { name: '', address: '', phone: '', email: '', latitude: 0, longitude: 0, client_type: '' },
-      formRuta: { seller_id: '', client_id: '', planned_date: '', planned_time: '', status: 'pending' }
+      formRuta: { seller_id: '', client_id: '', planned_date: '', status: 'pending' }
     }
   },
   mounted() {
@@ -522,15 +515,28 @@ export default {
           : `${import.meta.env.VITE_API_URL}/routes/`
         const method = this.editingRuta ? 'PUT' : 'POST'
         
-        await fetch(url, {
+        const response = await fetch(url, {
           method,
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.formRuta)
+          body: JSON.stringify({
+            seller_id: this.formRuta.seller_id,
+            client_id: this.formRuta.client_id,
+            planned_date: this.formRuta.planned_date,
+            status: this.formRuta.status
+          })
         })
+        
+        if (!response.ok) {
+          const error = await response.json()
+          alert(`Error: ${error.detail || 'Error al guardar ruta'}`)
+          return
+        }
+        
         this.fetchRutas()
         this.closeRutaModal()
       } catch (e) {
         console.error('Error saving ruta:', e)
+        alert(`Error: ${e.message}`)
       }
     },
     async deleteRuta(id) {
@@ -545,7 +551,7 @@ export default {
     closeRutaModal() {
       this.showRutaModal = false
       this.editingRuta = null
-      this.formRuta = { seller_id: '', client_id: '', planned_date: '', planned_time: '', status: 'pending' }
+      this.formRuta = { seller_id: '', client_id: '', planned_date: '', status: 'pending' }
     },
     
     // HELPERS
