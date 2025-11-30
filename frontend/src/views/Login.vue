@@ -59,10 +59,6 @@
         </div>
       </div>
 
-      <!-- Info -->
-      <div class="mt-8 text-center text-gray-600 text-sm">
-        <p>Demo: usa cualquier email y contraseña</p>
-      </div>
     </div>
   </div>
 </template>
@@ -84,23 +80,41 @@ export default {
       this.error = null
 
       try {
-        // En producción, aquí iría autenticación real
-        // Por ahora, guardamos datos de demo
-        const seller = {
-          id: 'cc328cdb-7969-48c5-838a-f90d0f998c7b',
-          name: this.email.split('@')[0],
-          email: this.email,
-          is_active: true
+        // Validar contra backend
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/auth/login/`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: this.email,
+              password: this.password
+            })
+          }
+        )
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          this.error = errorData.detail || 'Email o contraseña incorrectos'
+          return
         }
 
+        const seller = await response.json()
+
         // Guardar en localStorage
-        localStorage.setItem('seller', JSON.stringify(seller))
-        localStorage.setItem('token', 'demo-token-' + Date.now())
+        localStorage.setItem('seller', JSON.stringify({
+          id: seller.id,
+          name: seller.name,
+          email: seller.email,
+          phone: seller.phone,
+          is_active: seller.is_active
+        }))
+        localStorage.setItem('token', 'token-' + seller.id + '-' + Date.now())
 
         // Redirigir a dashboard
         this.$router.push('/comercial')
       } catch (e) {
-        this.error = 'Error al iniciar sesión: ' + e.message
+        this.error = 'Error de conexión: ' + e.message
       } finally {
         this.loading = false
       }

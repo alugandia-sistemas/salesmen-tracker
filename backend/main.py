@@ -15,6 +15,8 @@ from pathlib import Path
 import math
 # Agregar secrets:
 import secrets
+import bcrypt
+
 
 # ============================================================================
 # CONFIGURACIÓN Y CONEXIÓN BD
@@ -121,6 +123,7 @@ class Seller(Base):
     name = Column(String(255), nullable=False)
     email = Column(String(255), unique=True, nullable=False)
     phone = Column(String(20), nullable=False)
+    password_hash = Column(String(255), nullable=True)  # Para autenticación futura
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -1167,6 +1170,52 @@ def validate_invitation(token: str, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error: {str(e)}")
 
+@app.post("/auth/login/")
+def login(
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """Login - Validar seller contra BD con password"""
+    try:
+        email = request.get("email")
+        password = request.get("password")
+        
+        if not email or not password:
+            raise HTTPException(status_code=400, detail="Email y password requeridos")
+        
+        # Buscar seller por email
+        seller = db.query(Seller).filter(
+            Seller.email == email
+        ).first()
+        
+        if not seller:
+            raise HTTPException(status_code=401, detail="Email o contraseña incorrectos")
+        
+        # Validar que el seller esté activo
+        if not seller.is_active:
+            raise HTTPException(status_code=401, detail="Cuenta desactivada")
+        
+        # Verificar contraseña
+        if not seller.password_hash:
+            raise HTTPException(status_code=401, detail="Email o contraseña incorrectos")
+        
+        # Verificar password con bcrypt
+        if not bcrypt.checkpw(password.encode('utf-8'), seller.password_hash.encode('utf-8')):
+            raise HTTPException(status_code=401, detail="Email o contraseña incorrectos")
+        
+        return {
+            "id": str(seller.id),
+            "name": seller.name,
+            "email": seller.email,
+            "phone": seller.phone,
+            "is_active": seller.is_active,
+            "message": "Login exitoso"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Error en autenticación")
+
 
 @app.get("/admin/invitations/", response_model=List[dict])
 def list_invitations(
@@ -1209,6 +1258,9 @@ def register_with_token(
         if not token or not password:
             raise HTTPException(status_code=400, detail="Token y password requeridos")
         
+        if len(password) < 6:
+            raise HTTPException(status_code=400, detail="Contraseña debe tener mínimo 6 caracteres")
+        
         # Validar token
         invitation = db.query(Invitation).filter(
             Invitation.token == token,
@@ -1227,16 +1279,20 @@ def register_with_token(
         if existing:
             raise HTTPException(status_code=400, detail="Email ya registrado")
         
+        # Hashear contraseña
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
         # Crear seller
         seller = Seller(
             name=invitation.seller_name,
             email=invitation.email,
             phone=invitation.seller_phone,
+            password_hash=password_hash,
             is_active=True
         )
         
         db.add(seller)
-        db.flush()  # Para obtener el ID
+        db.flush()
         
         # Marcar invitación como usada
         invitation.is_used = True
