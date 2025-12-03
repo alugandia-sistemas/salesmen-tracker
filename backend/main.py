@@ -672,7 +672,7 @@ def list_clients(db: Session = Depends(get_db)):
     """Listar clientes con coordenadas convertidas a lat/lng"""
     from sqlalchemy import func
     
-    clients_db = db.query(Client).filter(Client.status == "active").all()
+    clients_db = db.query(Client).filter(Client.status == "active").order_by(Client.name).all()
     
     result = []
     for client in clients_db:
