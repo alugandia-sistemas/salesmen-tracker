@@ -6,7 +6,6 @@ import RegistroConToken from '../views/RegistroConToken.vue'
 import Comercial from '../views/Comercial.vue'
 import AdminGestion from '../views/AdminGestion.vue'
 import AdminInvitaciones from '../views/AdminInvitaciones.vue'
-import DirectorioClientes from '../views/DirectorioClientes.vue'
 
 const routes = [
   // Auth
@@ -44,12 +43,6 @@ const routes = [
     component: AdminInvitaciones,
     meta: { requiresAuth: true }
   },
-  // ✅ NUEVO: Directorio de Clientes
-  { 
-    path: '/admin/clientes', 
-    component: DirectorioClientes,
-    meta: { requiresAuth: true }
-  },
 
   // Redirect
   { 
@@ -69,10 +62,13 @@ router.beforeEach((to, from, next) => {
   const requiresAuth = to.meta.requiresAuth
 
   if (requiresAuth && !token) {
+    // Sin token en ruta protegida → Login
     next('/login')
   } else if (to.path === '/login' && token) {
+    // Con token en /login → Dashboard
     next('/comercial')
   } else if (to.path === '/registro' && token) {
+    // ✅ PERMITIR /registro incluso con token (para cambiar de vendedor)
     next()
   } else {
     next()

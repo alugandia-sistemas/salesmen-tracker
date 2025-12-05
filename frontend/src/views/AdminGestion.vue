@@ -113,47 +113,65 @@
       <div v-if="activeTab === 'clientes'">
         <div class="mb-6">
           <h2 class="text-3xl font-bold text-gray-900 mb-4">Clientes</h2>
-          <button 
-            @click="showClienteModal = true" 
-            class="w-full bg-gray-900 text-white py-4 rounded-xl font-semibold text-lg hover:bg-gray-800 transition"
-          >
-            + Nuevo Cliente
-          </button>
-        </div>
+          
+          <!-- ✅ ACCESO RÁPIDO AL DIRECTORIO -->
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <button 
+              @click="$router.push('/admin/clientes')"
+              class="bg-gray-100 text-gray-900 border-2 border-gray-300 py-4 rounded-xl font-semibold text-base hover:bg-gray-200 transition"
+            >
+              📋 Directorio
+            </button>
+            <button 
+              @click="showClienteModal = true" 
+              class="bg-gray-900 text-white py-4 rounded-xl font-semibold text-base hover:bg-gray-800 transition"
+            >
+              + Nuevo Cliente
+            </button>
+          </div>
 
-        <div v-if="clientes.length > 0" class="space-y-3">
-          <div v-for="cliente in clientes" :key="cliente.id" class="bg-white border-2 border-gray-200 rounded-xl p-5">
-            <div class="flex items-start gap-4 mb-4">
-              <div class="w-14 h-14 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
-                <span class="text-white font-bold text-lg">{{ cliente.name.charAt(0).toUpperCase() }}</span>
-              </div>
-              <div class="flex-1 min-w-0">
-                <h3 class="text-lg font-bold text-gray-900">{{ cliente.name }}</h3>
-                <p class="text-gray-600 text-sm truncate">{{ cliente.address }}</p>
-              </div>
+          <!-- Stats rápidos -->
+          <div class="grid grid-cols-3 gap-2 mb-4">
+            <div class="bg-gray-50 rounded-lg p-3 text-center border border-gray-200">
+              <p class="text-2xl font-bold text-gray-900">{{ contarPorTipo('carpintero_metalico') }}</p>
+              <p class="text-xs text-gray-600">Carpinteros</p>
             </div>
-            <div class="space-y-2 mb-4">
-              <p class="text-gray-700 text-sm">📞 {{ cliente.phone }}</p>
-              <p class="text-gray-700 text-sm">📧 {{ cliente.email }}</p>
-              <div class="flex gap-2">
-                <span class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-900">
-                  {{ getTipoCliente(cliente.client_type) }}
-                </span>
-                <span class="px-3 py-1 rounded-full text-xs font-semibold"
-                  :class="cliente.status === 'active' ? 'bg-gray-200 text-gray-900' : 'bg-gray-100 text-gray-600'">
-                  {{ cliente.status === 'active' ? '✓ Activo' : '• Inactivo' }}
-                </span>
-              </div>
+            <div class="bg-gray-50 rounded-lg p-3 text-center border border-gray-200">
+              <p class="text-2xl font-bold text-gray-900">{{ contarPorTipo('cristalero') }}</p>
+              <p class="text-xs text-gray-600">Cristaleros</p>
             </div>
-            <div class="flex gap-2">
-              <button @click="editCliente(cliente)" class="flex-1 bg-gray-100 text-gray-900 py-3 rounded-lg font-semibold text-sm hover:bg-gray-200 transition">
-                Editar
-              </button>
-              <button @click="deleteCliente(cliente.id)" class="flex-1 bg-gray-900 text-white py-3 rounded-lg font-semibold text-sm hover:bg-gray-800 transition">
-                Eliminar
-              </button>
+            <div class="bg-gray-50 rounded-lg p-3 text-center border border-gray-200">
+              <p class="text-2xl font-bold text-gray-900">{{ contarPorTipo('taller') }}</p>
+              <p class="text-xs text-gray-600">Talleres</p>
             </div>
           </div>
+        </div>
+
+        <!-- Lista resumida de clientes recientes -->
+        <h3 class="text-lg font-bold text-gray-900 mb-3">Clientes Recientes</h3>
+        <div v-if="clientes.length > 0" class="space-y-3">
+          <div v-for="cliente in clientesRecientes" :key="cliente.id" class="bg-white border-2 border-gray-200 rounded-xl p-4">
+            <div class="flex items-start gap-3">
+              <div class="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
+                <span class="text-white font-bold">{{ cliente.name.charAt(0).toUpperCase() }}</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <h4 class="text-base font-bold text-gray-900 truncate">{{ cliente.name }}</h4>
+                <p class="text-gray-600 text-sm truncate">{{ cliente.address }}</p>
+                <span class="px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 mt-1 inline-block">
+                  {{ getTipoCliente(cliente.client_type) }}
+                </span>
+              </div>
+              <button @click="editCliente(cliente)" class="text-gray-400 hover:text-gray-900">✏️</button>
+            </div>
+          </div>
+          
+          <button 
+            @click="$router.push('/admin/clientes')"
+            class="w-full bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold text-sm hover:bg-gray-200 transition"
+          >
+            Ver todos los clientes ({{ clientes.length }}) →
+          </button>
         </div>
         <div v-else class="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center">
           <p class="text-gray-600 text-sm mb-4">Sin clientes registrados</p>
@@ -274,13 +292,18 @@
             <input v-model="formCliente.email" type="email" placeholder="info@cliente.com" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" />
           </div>
 
+          <!-- ✅ CATEGORÍAS ACTUALIZADAS -->
           <div>
             <label class="block text-sm font-semibold text-gray-900 mb-2">Tipo de Cliente</label>
             <select v-model="formCliente.client_type" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
               <option value="">-- Selecciona tipo --</option>
-              <option value="carpenter">Carpintero</option>
-              <option value="installer">Instalador</option>
-              <option value="industrial">Industrial</option>
+              <option value="carpintero_metalico">🔧 Carpintero Metálico</option>
+              <option value="cristalero">🪟 Cristalero</option>
+              <option value="taller">🏭 Taller Industrial</option>
+              <option value="instalador">🔨 Instalador</option>
+              <option value="cerrajero">🔑 Cerrajero</option>
+              <option value="constructor">🏗️ Constructor</option>
+              <option value="otros">📦 Otros</option>
             </select>
           </div>
 
@@ -389,13 +412,40 @@ export default {
       
       formVendedor: { name: '', email: '', phone: '', is_active: true },
       formCliente: { name: '', address: '', phone: '', email: '', latitude: 0, longitude: 0, client_type: '' },
-      formRuta: { seller_id: '', client_id: '', planned_date: '', status: 'pending' }
+      formRuta: { seller_id: '', client_id: '', planned_date: '', status: 'pending' },
+      
+      // Mapeo de tipos de cliente
+      tiposCliente: {
+        'carpintero_metalico': '🔧 Carpintero Metálico',
+        'cristalero': '🪟 Cristalero',
+        'taller': '🏭 Taller Industrial',
+        'instalador': '🔨 Instalador',
+        'cerrajero': '🔑 Cerrajero',
+        'constructor': '🏗️ Constructor',
+        'otros': '📦 Otros',
+        // Compatibilidad con tipos antiguos
+        'carpenter': '🔧 Carpintero',
+        'installer': '🔨 Instalador',
+        'industrial': '🏭 Industrial'
+      }
+    }
+  },
+  computed: {
+    clientesRecientes() {
+      // Mostrar solo los 5 más recientes
+      return this.clientes.slice(0, 5)
     }
   },
   mounted() {
     this.fetchVendedores()
     this.fetchClientes()
     this.fetchRutas()
+    
+    // Verificar si viene con tab específico desde query params
+    const tab = this.$route.query.tab
+    if (tab) {
+      this.activeTab = tab
+    }
   },
   methods: {
     async fetchVendedores() {
@@ -421,6 +471,11 @@ export default {
       } catch (e) {
         console.error('Error fetching rutas:', e)
       }
+    },
+    
+    // Contar clientes por tipo
+    contarPorTipo(tipo) {
+      return this.clientes.filter(c => c.client_type === tipo).length
     },
     
     // VENDEDORES
@@ -563,8 +618,7 @@ export default {
     
     // HELPERS
     getTipoCliente(type) {
-      const tipos = { carpenter: 'Carpintero', installer: 'Instalador', industrial: 'Industrial' }
-      return tipos[type] || type
+      return this.tiposCliente[type] || type
     },
     getNombreVendedor(id) {
       const v = this.vendedores.find(x => x.id === id)
