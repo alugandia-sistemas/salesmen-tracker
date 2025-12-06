@@ -113,6 +113,19 @@ async def init_db_with_retry(max_retries: int = 5, delay: int = 2):
 async def startup_event():
     """Evento de startup: inicializar BD"""
     await init_db_with_retry()
+    
+    # Manual Migration for sales_route_id
+    try:
+        with engine.connect() as conn:
+            # Check if clients table has sales_route_id
+            result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='clients' AND column_name='sales_route_id'"))
+            if not result.fetchone():
+                print("⚠️ Migrating: Adding sales_route_id to clients...")
+                conn.execute(text("ALTER TABLE clients ADD COLUMN sales_route_id UUID REFERENCES sales_routes(id)"))
+                conn.commit()
+                print("✅ Migration done.")
+    except Exception as e:
+        print(f"Migration warning: {e}")
 
 # ============================================================================
 # MODELOS DE BD (SQLAlchemy)
@@ -133,6 +146,7 @@ class Seller(Base):
     routes = relationship("Route", back_populates="seller")
     visits = relationship("Visit", back_populates="seller")
     opportunities = relationship("Opportunity", back_populates="seller")
+    sales_routes = relationship("SalesRoute", back_populates="seller")
 
 
 class Client(Base):
@@ -150,12 +164,17 @@ class Client(Base):
 
     client_type = Column(String(50), nullable=False)  # carpenter, installer, industrial
     status = Column(String(20), default="active")  # active, inactive, pending
+    
+    # ✅ NUEVOS CAMPOS v3 (Zones & SalesRoutes)
+    sales_route_id = Column(PG_UUID(as_uuid=True), ForeignKey("sales_routes.id"), nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relaciones
     routes = relationship("Route", back_populates="client")
     visits = relationship("Visit", back_populates="client")
     opportunities = relationship("Opportunity", back_populates="client")
+    sales_route = relationship("SalesRoute", back_populates="clients")
 
 
 class Route(Base):
@@ -181,6 +200,32 @@ class Route(Base):
     seller = relationship("Seller", back_populates="routes")
     client = relationship("Client", back_populates="routes")
     visits = relationship("Visit", back_populates="route")
+
+class Zone(Base):
+    __tablename__ = "zones"
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    # GeoJSON Polygon. Using Geometry for flexibility.
+    geometry = Column(Geometry("POLYGON", srid=4326), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    sales_routes = relationship("SalesRoute", back_populates="zone")
+
+class SalesRoute(Base):
+    """
+    Represents a permanent 'Territory' or 'Collection of Customers'.
+    Distinct from day-to-day 'Route' (visits schedule).
+    """
+    __tablename__ = "sales_routes"
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    zone_id = Column(PG_UUID(as_uuid=True), ForeignKey("zones.id"), nullable=True)
+    seller_id = Column(PG_UUID(as_uuid=True), ForeignKey("sellers.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    zone = relationship("Zone", back_populates="sales_routes")
+    seller = relationship("Seller", back_populates="sales_routes")
+    clients = relationship("Client", back_populates="sales_route")
 
 # Invitation. Para gestionar invitaciones a nuevos vendedores.
 # Buscar en main.py dónde están los modelos (alrededor de línea 100-200)
@@ -286,6 +331,42 @@ class SellerResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- ZONES SCHEMAS ---
+class ZoneCreate(BaseModel):
+    name: str
+    geometry: Optional[str] = None # WKT or GeoJSON string if handled manually, or generic dict
+
+class ZoneResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+# --- SALES ROUTE SCHEMAS ---
+class SalesRouteCreate(BaseModel):
+    name: str
+    zone_id: Optional[uuid.UUID] = None
+    seller_id: Optional[uuid.UUID] = None
+
+class SalesRouteResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    zone_id: Optional[uuid.UUID]
+    seller_id: Optional[uuid.UUID]
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class SalesRouteUpdate(BaseModel):
+    name: Optional[str] = None
+    zone_id: Optional[uuid.UUID] = None
+    seller_id: Optional[uuid.UUID] = None
+
+class ClientUpdateRoute(BaseModel):
+    sales_route_id: Optional[uuid.UUID]
 
 
 class CheckInRequest(BaseModel):
@@ -2377,3 +2458,110 @@ def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# ============================================================================
+# ENDPOINTS: ZONES & SALES ROUTES
+# ============================================================================
+
+@app.post("/zones/", response_model=ZoneResponse)
+def create_zone(zone: ZoneCreate, db: Session = Depends(get_db)):
+    # Convert geometry string/dict to WKT/WKB if needed, for now assuming simple polygon or null
+    # If using GeoAlchemy2, we can pass WKT string directly to geometry column usually
+    new_zone = Zone(name=zone.name, geometry=zone.geometry)
+    db.add(new_zone)
+    db.commit()
+    db.refresh(new_zone)
+    return new_zone
+
+@app.get("/zones/", response_model=List[ZoneResponse])
+def get_zones(db: Session = Depends(get_db)):
+    return db.query(Zone).all()
+
+@app.post("/sales-routes/", response_model=SalesRouteResponse)
+def create_sales_route(route: SalesRouteCreate, db: Session = Depends(get_db)):
+    new_route = SalesRoute(
+        name=route.name,
+        zone_id=route.zone_id,
+        seller_id=route.seller_id
+    )
+    db.add(new_route)
+    db.commit()
+    db.refresh(new_route)
+    return new_route
+
+@app.get("/sales-routes/", response_model=List[SalesRouteResponse])
+def get_sales_routes(seller_id: Optional[uuid.UUID] = None, zone_id: Optional[uuid.UUID] = None, db: Session = Depends(get_db)):
+    query = db.query(SalesRoute)
+    if seller_id:
+        query = query.filter(SalesRoute.seller_id == seller_id)
+    if zone_id:
+        query = query.filter(SalesRoute.zone_id == zone_id)
+    return query.all()
+
+@app.put("/sales-routes/{route_id}", response_model=SalesRouteResponse)
+def update_sales_route(route_id: uuid.UUID, route_update: SalesRouteUpdate, db: Session = Depends(get_db)):
+    db_route = db.query(SalesRoute).filter(SalesRoute.id == route_id).first()
+    if not db_route:
+        raise HTTPException(status_code=404, detail="Sales Route not found")
+    
+    if route_update.name is not None:
+        db_route.name = route_update.name
+    if route_update.zone_id is not None:
+        db_route.zone_id = route_update.zone_id
+    if route_update.seller_id is not None:
+        db_route.seller_id = route_update.seller_id
+        
+    db.commit()
+    db.refresh(db_route)
+    return db_route
+
+@app.put("/clients/{client_id}/assign-route/")
+def assign_client_to_route(client_id: uuid.UUID, route_update: ClientUpdateRoute, db: Session = Depends(get_db)):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    client.sales_route_id = route_update.sales_route_id
+    db.commit()
+    return {"message": "Client assigned to route successfully"}
+
+@app.get("/my-route-customers/", response_model=List[ClientResponse])
+def get_my_route_customers(seller_id: uuid.UUID, db: Session = Depends(get_db)):
+    # Get all SalesRoutes for this seller
+    routes = db.query(SalesRoute).filter(SalesRoute.seller_id == seller_id).all()
+    route_ids = [r.id for r in routes]
+    
+    if not route_ids:
+        return []
+        
+    # Get all clients in those routes
+    clients = db.query(Client).filter(Client.sales_route_id.in_(route_ids)).all()
+    
+    # Needs ClientResponse conversion (same as list_clients)
+    # Reusing list_clients logic or manually creating response
+    
+    result = []
+    for client in clients:
+         # Simplified conversion here (or could extract to helper)
+         try:
+             coords_wkt = db.query(func.ST_AsText(client.location)).scalar()
+             lat, lng = None, None 
+             if coords_wkt and coords_wkt.startswith("POINT"):
+                 coords_str = coords_wkt.replace("POINT(", "").replace(")", "")
+                 lng, lat = map(float, coords_str.split())
+
+             result.append({
+                 "id": str(client.id),
+                 "name": client.name,
+                 "address": client.address,
+                 "phone": client.phone,
+                 "email": client.email,
+                 "client_type": client.client_type,
+                 "status": client.status,
+                 "latitude": lat,
+                 "longitude": lng,
+                 "created_at": client.created_at
+             })
+         except:
+             pass
+    return result

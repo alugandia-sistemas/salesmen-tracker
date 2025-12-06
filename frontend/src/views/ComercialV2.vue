@@ -9,7 +9,12 @@
             Salir
           </button>
         </div>
-        <p class="text-gray-600 text-sm mt-2">{{ sellerName }}</p>
+        <div class="flex justify-between items-center mt-2">
+          <p class="text-gray-600 text-sm">{{ sellerName }}</p>
+          <router-link to="/my-route" class="text-blue-600 text-sm font-bold bg-blue-50 px-3 py-1 rounded-full">
+             📍 Mi Cartera
+          </router-link>
+        </div>
       </div>
     </nav>
 

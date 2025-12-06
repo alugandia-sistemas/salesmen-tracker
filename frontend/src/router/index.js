@@ -7,6 +7,8 @@ import ComercialV2 from '../views/ComercialV2.vue'
 import AdminGestion from '../views/AdminGestion.vue'
 import AdminInvitaciones from '../views/AdminInvitaciones.vue'
 import DirectorioClientes from '../views/DirectorioClientes.vue'
+import MyRoute from '../views/MyRoute.vue'
+import AdminZones from '../views/AdminZones.vue'
 
 const routes = [
   // Auth
@@ -49,6 +51,16 @@ const routes = [
   { 
     path: '/admin/clientes', 
     component: DirectorioClientes,
+    meta: { requiresAuth: true }
+  },
+  { 
+    path: '/admin/zones', 
+    component: AdminZones,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/my-route',
+    component: MyRoute,
     meta: { requiresAuth: true }
   },
 
