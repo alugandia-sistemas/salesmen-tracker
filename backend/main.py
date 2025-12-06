@@ -17,6 +17,8 @@ import math
 import secrets
 import bcrypt
 
+from fastapi import APIRouter, HTTPException, Depends, Query
+from sqlalchemy import func, and_, or_
 
 # ============================================================================
 # CONFIGURACIÓN Y CONEXIÓN BD
@@ -145,7 +147,7 @@ class Client(Base):
     # ✅ CORRECCIÓN: Usar Geography en lugar de Geometry para precisión
     # Geography utiliza elipsoide WGS84 para cálculos de distancia más precisos
     location = Column(Geography(geometry_type='POINT', srid=4326), nullable=False)
-    
+
     client_type = Column(String(50), nullable=False)  # carpenter, installer, industrial
     status = Column(String(20), default="active")  # active, inactive, pending
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -165,7 +167,14 @@ class Route(Base):
     
     planned_date = Column(DateTime, nullable=False)  # Solo fecha (hora se obtiene en check-in)
     status = Column(String(20), default="pending")  # pending, in_progress, completed, cancelled
-    
+ 
+    # ✅ NUEVOS CAMPOS v2
+    postpone_reason = Column(String(50), nullable=True)
+    original_planned_date = Column(DateTime, nullable=True)
+    postponed_at = Column(DateTime, nullable=True)
+    postpone_notes = Column(String(255), nullable=True)
+    times_postponed = Column(Integer, default=0)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Foreign Keys & Relaciones
@@ -185,6 +194,10 @@ class Invitation(Base):
     seller_name = Column(String(255), nullable=False)
     seller_phone = Column(String(20), nullable=False)
     is_used = Column(Boolean, default=False)
+    # ✅ NUEVOS CAMPOS v2.1
+    visit_result = Column(String(20), nullable=True)  # venta, no_venta, interesado, seguimiento, ausente
+    quick_notes = Column(String(100), nullable=True)  # Notas rápidas obligatorias
+    detailed_notes = Column(Text, nullable=True)       # Notas detalladas opcionales    
     expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(days=7))
     created_by = Column(PG_UUID(as_uuid=True), nullable=True) # ID del admin que creó la invitación
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -1315,7 +1328,682 @@ def register_with_token(
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error: {str(e)}")
 
-   
+
+# ==============================================================================
+# ENDPOINT 1: HISTORIAL DE RUTAS DEL VENDEDOR
+# ==============================================================================
+
+# Añadir a main.py:
+
+@app.get("/seller/{seller_id}/history/")
+def get_seller_route_history(
+    seller_id: str,
+    months: int = Query(default=3, ge=1, le=6, description="Meses hacia atrás (1-6)"),
+    status: Optional[str] = Query(None, description="pending, completed, cancelled"),
+    visit_result: Optional[str] = Query(None, description="venta, no_venta, interesado, seguimiento, ausente"),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=50),
+    db: Session = Depends(get_db)
+):
+    """
+    ✅ HISTORIAL DE RUTAS DEL VENDEDOR
+    
+    Retorna rutas de los últimos N meses con:
+    - Datos del cliente
+    - Resultado de visita (si existe)
+    - Notas rápidas y detalladas
+    - Estado de la ruta
+    
+    Paginado para rendimiento móvil.
+    """
+    from sqlalchemy import func
+    
+    try:
+        seller_uuid = uuid.UUID(seller_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"seller_id inválido: {seller_id}")
+    
+    # Calcular fecha límite
+    date_limit = datetime.utcnow() - timedelta(days=months * 30)
+    
+    # Query base
+    query = db.query(Route).options(
+        joinedload(Route.client),
+        joinedload(Route.visits)
+    ).filter(
+        Route.seller_id == seller_uuid,
+        Route.planned_date >= date_limit
+    )
+    
+    # Filtros opcionales
+    if status:
+        query = query.filter(Route.status == status)
+    
+    # Ordenar por fecha descendente
+    query = query.order_by(Route.planned_date.desc())
+    
+    # Contar total antes de paginar
+    total = query.count()
+    
+    # Paginar
+    offset = (page - 1) * limit
+    routes = query.offset(offset).limit(limit).all()
+    
+    # Procesar resultados
+    result = []
+    for route in routes:
+        # Obtener coordenadas del cliente
+        lat, lng = None, None
+        if route.client:
+            try:
+                coords_wkt = db.query(func.ST_AsText(route.client.location)).scalar()
+                if coords_wkt and coords_wkt.startswith("POINT"):
+                    coords_str = coords_wkt.replace("POINT(", "").replace(")", "")
+                    lng, lat = map(float, coords_str.split())
+            except:
+                pass
+        
+        # Obtener última visita asociada
+        visit_data = None
+        if route.visits:
+            last_visit = max(route.visits, key=lambda v: v.checkin_time or datetime.min)
+            visit_data = {
+                "id": str(last_visit.id),
+                "checkin_time": last_visit.checkin_time.isoformat() if last_visit.checkin_time else None,
+                "visit_result": last_visit.visit_result.value if hasattr(last_visit, 'visit_result') and last_visit.visit_result else None,
+                "quick_notes": getattr(last_visit, 'quick_notes', None),
+                "detailed_notes": getattr(last_visit, 'detailed_notes', last_visit.notes),
+                "checkin_is_valid": last_visit.checkin_is_valid,
+                "checkin_distance_meters": last_visit.checkin_distance_meters
+            }
+            
+            # Filtrar por resultado de visita si se especifica
+            if visit_result and visit_data.get("visit_result") != visit_result:
+                continue
+        
+        result.append({
+            "id": str(route.id),
+            "planned_date": route.planned_date.isoformat(),
+            "status": route.status,
+            "postpone_reason": getattr(route, 'postpone_reason', None),
+            "times_postponed": getattr(route, 'times_postponed', 0),
+            "client": {
+                "id": str(route.client.id) if route.client else None,
+                "name": route.client.name if route.client else "Desconocido",
+                "address": route.client.address if route.client else None,
+                "phone": route.client.phone if route.client else None,
+                "client_type": route.client.client_type if route.client else None,
+                "latitude": lat,
+                "longitude": lng
+            } if route.client else None,
+            "visit": visit_data
+        })
+    
+    return {
+        "seller_id": seller_id,
+        "period_months": months,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": (total + limit - 1) // limit,
+        "routes": result
+    }
+
+
+# ==============================================================================
+# ENDPOINT 2: CHECK-IN MEJORADO v2
+# ==============================================================================
+
+@app.post("/visits/checkin/v2/")
+async def checkin_v2(
+    request: dict,  # CheckInRequestV2
+    db: Session = Depends(get_db)
+):
+    """
+    ✅ CHECK-IN MEJORADO v2
+    
+    Requiere:
+    - visit_result: OBLIGATORIO (venta, no_venta, interesado, seguimiento, ausente)
+    - quick_notes: OBLIGATORIO (5-100 caracteres)
+    - client_found: OBLIGATORIO
+    
+    Genera acciones automáticas según resultado:
+    - venta → Crear oportunidad en CRM
+    - no_venta → Programar revisita en 60 días
+    - interesado → Tarea seguimiento 48h
+    - seguimiento → Tarea seguimiento 7 días
+    - ausente → Reprogramar visita +1 día
+    """
+    from sqlalchemy import func
+    
+    # Validar campos obligatorios
+    required_fields = ['route_id', 'seller_id', 'client_id', 'latitude', 'longitude', 
+                       'visit_result', 'quick_notes', 'client_found']
+    
+    for field in required_fields:
+        if field not in request or request[field] is None:
+            raise HTTPException(status_code=400, detail=f"Campo obligatorio: {field}")
+    
+    # Validar visit_result
+    valid_results = ['venta', 'no_venta', 'interesado', 'seguimiento', 'ausente']
+    if request['visit_result'] not in valid_results:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"visit_result debe ser uno de: {', '.join(valid_results)}"
+        )
+    
+    # Validar quick_notes
+    quick_notes = request['quick_notes'].strip()
+    if len(quick_notes) < 5:
+        raise HTTPException(status_code=400, detail="Notas rápidas debe tener mínimo 5 caracteres")
+    if len(quick_notes) > 100:
+        raise HTTPException(status_code=400, detail="Notas rápidas máximo 100 caracteres")
+    
+    try:
+        route_id = uuid.UUID(request['route_id'])
+        seller_id = uuid.UUID(request['seller_id'])
+        client_id = uuid.UUID(request['client_id'])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"IDs inválidos: {str(e)}")
+    
+    # Obtener cliente
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    # Calcular distancia
+    checkin_point_wkt = f"POINT({request['longitude']} {request['latitude']})"
+    
+    distance_result = db.query(
+        func.ST_DistanceSphere(
+            func.ST_GeomFromText(checkin_point_wkt, 4326),
+            client.location
+        )
+    ).scalar()
+    
+    distance_meters = float(distance_result) if distance_result else 0
+    checkin_time = datetime.utcnow()
+    
+    # Validar check-in
+    is_valid, error_message, fraud_flags = validate_checkin(
+        distance_meters=distance_meters,
+        checkin_time=checkin_time,
+        client_found=request['client_found'],
+        db=db,
+        seller_id=seller_id,
+        client_id=client_id
+    )
+    
+    # Crear visita
+    visit = Visit(
+        route_id=route_id,
+        seller_id=seller_id,
+        client_id=client_id,
+        checkin_time=checkin_time,
+        checkin_location=func.ST_GeomFromText(checkin_point_wkt, 4326),
+        checkin_distance_meters=distance_meters,
+        checkin_is_valid=is_valid,
+        checkin_validation_error=error_message,
+        fraud_flags="|".join(fraud_flags) if fraud_flags else None,
+        # Nuevos campos v2
+        visit_result=request['visit_result'],
+        quick_notes=quick_notes,
+        detailed_notes=request.get('detailed_notes'),
+        notes=request.get('detailed_notes')  # Compatibilidad con campo antiguo
+    )
+    
+    db.add(visit)
+    
+    # Generar acciones automáticas según resultado
+    auto_actions = generate_auto_actions(
+        visit_result=request['visit_result'],
+        seller_id=seller_id,
+        client_id=client_id,
+        route_id=route_id,
+        db=db
+    )
+    
+    db.commit()
+    db.refresh(visit)
+    
+    return {
+        "visit_id": str(visit.id),
+        "success": True,
+        "is_valid": is_valid,
+        "distance_meters": distance_meters,
+        "visit_result": request['visit_result'],
+        "validation_error": error_message,
+        "fraud_flags": fraud_flags,
+        "message": f"✅ Check-in registrado como '{request['visit_result']}'",
+        "auto_actions": auto_actions
+    }
+
+
+def generate_auto_actions(visit_result: str, seller_id, client_id, route_id, db: Session) -> List[dict]:
+    """
+    Genera acciones automáticas según el resultado de la visita
+    """
+    actions = []
+    
+    RESULT_ACTIONS = {
+        "venta": {
+            "action": "create_opportunity",
+            "description": "📊 Crear oportunidad en CRM",
+            "notify": True
+        },
+        "no_venta": {
+            "action": "schedule_revisit",
+            "days": 60,
+            "description": "📅 Revisita programada en 60 días"
+        },
+        "interesado": {
+            "action": "create_task",
+            "days": 2,
+            "description": "⚡ Tarea de seguimiento creada (48h)",
+            "priority": "high"
+        },
+        "seguimiento": {
+            "action": "create_task",
+            "days": 7,
+            "description": "📋 Tarea de seguimiento creada (7 días)",
+            "priority": "medium"
+        },
+        "ausente": {
+            "action": "reschedule",
+            "days": 1,
+            "description": "🔄 Visita reprogramada +1 día hábil"
+        }
+    }
+    
+    action_config = RESULT_ACTIONS.get(visit_result)
+    
+    if action_config:
+        if action_config["action"] == "schedule_revisit":
+            # Crear nueva ruta para revisita
+            new_date = datetime.utcnow() + timedelta(days=action_config["days"])
+            new_route = Route(
+                seller_id=seller_id,
+                client_id=client_id,
+                planned_date=new_date,
+                status="pending"
+            )
+            db.add(new_route)
+            actions.append({
+                "type": "revisit_scheduled",
+                "date": new_date.strftime("%Y-%m-%d"),
+                "description": action_config["description"]
+            })
+        
+        elif action_config["action"] == "reschedule":
+            # Reprogramar la ruta original
+            route = db.query(Route).filter(Route.id == route_id).first()
+            if route:
+                new_date = datetime.utcnow() + timedelta(days=action_config["days"])
+                new_route = Route(
+                    seller_id=seller_id,
+                    client_id=client_id,
+                    planned_date=new_date,
+                    status="pending"
+                )
+                db.add(new_route)
+                actions.append({
+                    "type": "rescheduled",
+                    "date": new_date.strftime("%Y-%m-%d"),
+                    "description": action_config["description"]
+                })
+        
+        else:
+            # Registrar acción (se procesa por otro sistema/webhook)
+            actions.append({
+                "type": action_config["action"],
+                "description": action_config["description"],
+                "days": action_config.get("days"),
+                "priority": action_config.get("priority")
+            })
+    
+    return actions
+
+
+# ==============================================================================
+# ENDPOINT 3: APLAZAR/MODIFICAR RUTA
+# ==============================================================================
+
+@app.post("/routes/{route_id}/postpone/")
+def postpone_route(
+    route_id: str,
+    request: dict,  # PostponeRouteRequest
+    db: Session = Depends(get_db)
+):
+    """
+    ✅ APLAZAR UNA RUTA
+    
+    Razones válidas:
+    - cliente_ausente → +1 día hábil
+    - cliente_ocupado → Fecha indicada por vendedor
+    - emergencia_personal → Sin reprogramar (admin decide)
+    - prioridad_otro_cliente → +2 días hábiles
+    - condiciones_meteorologicas → +1 día
+    - problema_vehiculo → Sin reprogramar
+    - cliente_inactivo → Marcar cliente inactivo
+    
+    Registra historial de aplazamientos.
+    """
+    try:
+        route_uuid = uuid.UUID(route_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"route_id inválido: {route_id}")
+    
+    # Validar razón
+    valid_reasons = [
+        'cliente_ausente', 'cliente_ocupado', 'emergencia_personal',
+        'prioridad_otro_cliente', 'condiciones_meteorologicas',
+        'problema_vehiculo', 'cliente_inactivo'
+    ]
+    
+    reason = request.get('reason')
+    if not reason or reason not in valid_reasons:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"reason debe ser uno de: {', '.join(valid_reasons)}"
+        )
+    
+    # Obtener ruta
+    route = db.query(Route).filter(Route.id == route_uuid).first()
+    if not route:
+        raise HTTPException(status_code=404, detail="Ruta no encontrada")
+    
+    # Guardar fecha original si es primer aplazamiento
+    if not hasattr(route, 'original_planned_date') or not route.original_planned_date:
+        route.original_planned_date = route.planned_date
+    
+    # Calcular nueva fecha según razón
+    RESCHEDULE_DAYS = {
+        'cliente_ausente': 1,
+        'cliente_ocupado': None,  # Usa new_date del request
+        'emergencia_personal': None,
+        'prioridad_otro_cliente': 2,
+        'condiciones_meteorologicas': 1,
+        'problema_vehiculo': None,
+        'cliente_inactivo': None
+    }
+    
+    days_ahead = RESCHEDULE_DAYS.get(reason)
+    new_date = None
+    
+    if days_ahead:
+        # Calcular próximo día hábil
+        new_date = datetime.utcnow()
+        days_added = 0
+        while days_added < days_ahead:
+            new_date += timedelta(days=1)
+            if new_date.weekday() < 5:  # Lunes a Viernes
+                days_added += 1
+    elif request.get('new_date'):
+        try:
+            new_date = datetime.strptime(request['new_date'], "%Y-%m-%d")
+        except:
+            raise HTTPException(status_code=400, detail="Formato de fecha inválido. Usar YYYY-MM-DD")
+    
+    # Actualizar ruta
+    route.postpone_reason = reason
+    route.postponed_at = datetime.utcnow()
+    route.postpone_notes = request.get('notes')
+    route.times_postponed = getattr(route, 'times_postponed', 0) + 1
+    route.status = 'postponed'
+    
+    response_data = {
+        "route_id": route_id,
+        "reason": reason,
+        "reason_label": get_reason_label(reason),
+        "times_postponed": route.times_postponed,
+        "original_date": route.original_planned_date.strftime("%Y-%m-%d") if route.original_planned_date else None,
+        "new_date": None,
+        "new_route_id": None,
+        "message": ""
+    }
+    
+    # Crear nueva ruta si hay fecha
+    if new_date:
+        new_route = Route(
+            seller_id=route.seller_id,
+            client_id=route.client_id,
+            planned_date=new_date,
+            status="pending"
+        )
+        db.add(new_route)
+        db.flush()
+        
+        response_data["new_date"] = new_date.strftime("%Y-%m-%d")
+        response_data["new_route_id"] = str(new_route.id)
+        response_data["message"] = f"✅ Ruta aplazada. Nueva visita: {new_date.strftime('%d/%m/%Y')}"
+    else:
+        response_data["message"] = f"✅ Ruta aplazada por '{get_reason_label(reason)}'. Pendiente de reprogramar."
+    
+    # Si cliente_inactivo, marcar cliente
+    if reason == 'cliente_inactivo':
+        client = db.query(Client).filter(Client.id == route.client_id).first()
+        if client:
+            client.status = 'inactive'
+            response_data["message"] += " Cliente marcado como inactivo."
+    
+    db.commit()
+    
+    return response_data
+
+
+def get_reason_label(reason: str) -> str:
+    """Etiqueta legible para razón de aplazamiento"""
+    labels = {
+        'cliente_ausente': "Cliente cerrado/no disponible",
+        'cliente_ocupado': "Cliente pidió otro día",
+        'emergencia_personal': "Emergencia personal del vendedor",
+        'prioridad_otro_cliente': "Prioridad otro cliente urgente",
+        'condiciones_meteorologicas': "Condiciones meteorológicas",
+        'problema_vehiculo': "Problema con vehículo",
+        'cliente_inactivo': "Cliente ya no opera"
+    }
+    return labels.get(reason, reason)
+
+
+# ==============================================================================
+# ENDPOINT 4: CLIENTES CON HISTORIAL DE VISITAS
+# ==============================================================================
+
+@app.get("/seller/{seller_id}/clients/")
+def get_seller_clients_with_history(
+    seller_id: str,
+    include_visits: bool = Query(default=True, description="Incluir últimas visitas"),
+    months: int = Query(default=3, ge=1, le=6),
+    db: Session = Depends(get_db)
+):
+    """
+    ✅ CLIENTES DEL VENDEDOR CON HISTORIAL
+    
+    Lista clientes visitados por el vendedor con:
+    - Datos del cliente
+    - Última visita y resultado
+    - Total de visitas en el período
+    - Tasa de conversión por cliente
+    """
+    from sqlalchemy import func
+    
+    try:
+        seller_uuid = uuid.UUID(seller_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"seller_id inválido: {seller_id}")
+    
+    date_limit = datetime.utcnow() - timedelta(days=months * 30)
+    
+    # Obtener clientes visitados por este vendedor
+    client_visits = db.query(
+        Visit.client_id,
+        func.count(Visit.id).label('total_visits'),
+        func.max(Visit.checkin_time).label('last_visit'),
+        func.count(Visit.id).filter(Visit.visit_result == 'venta').label('ventas'),
+        func.count(Visit.id).filter(Visit.visit_result == 'interesado').label('interesados')
+    ).filter(
+        Visit.seller_id == seller_uuid,
+        Visit.checkin_time >= date_limit
+    ).group_by(Visit.client_id).all()
+    
+    result = []
+    
+    for cv in client_visits:
+        client = db.query(Client).filter(Client.id == cv.client_id).first()
+        if not client:
+            continue
+        
+        # Coordenadas
+        lat, lng = None, None
+        try:
+            coords_wkt = db.query(func.ST_AsText(client.location)).scalar()
+            if coords_wkt and coords_wkt.startswith("POINT"):
+                coords_str = coords_wkt.replace("POINT(", "").replace(")", "")
+                lng, lat = map(float, coords_str.split())
+        except:
+            pass
+        
+        # Última visita detallada
+        last_visit_data = None
+        if include_visits:
+            last_visit = db.query(Visit).filter(
+                Visit.client_id == cv.client_id,
+                Visit.seller_id == seller_uuid
+            ).order_by(Visit.checkin_time.desc()).first()
+            
+            if last_visit:
+                last_visit_data = {
+                    "id": str(last_visit.id),
+                    "date": last_visit.checkin_time.isoformat() if last_visit.checkin_time else None,
+                    "result": last_visit.visit_result.value if hasattr(last_visit, 'visit_result') and last_visit.visit_result else None,
+                    "quick_notes": getattr(last_visit, 'quick_notes', None),
+                    "detailed_notes": getattr(last_visit, 'detailed_notes', last_visit.notes)
+                }
+        
+        # Calcular tasa de conversión
+        conversion_rate = 0
+        if cv.total_visits > 0:
+            effective_visits = cv.total_visits - (cv.total_visits - cv.ventas - cv.interesados)
+            if effective_visits > 0:
+                conversion_rate = round((cv.ventas / effective_visits) * 100, 1)
+        
+        result.append({
+            "client": {
+                "id": str(client.id),
+                "name": client.name,
+                "address": client.address,
+                "phone": client.phone,
+                "email": client.email,
+                "client_type": client.client_type,
+                "status": client.status,
+                "latitude": lat,
+                "longitude": lng
+            },
+            "stats": {
+                "total_visits": cv.total_visits,
+                "ventas": cv.ventas,
+                "interesados": cv.interesados,
+                "conversion_rate": conversion_rate,
+                "last_visit": cv.last_visit.isoformat() if cv.last_visit else None
+            },
+            "last_visit": last_visit_data
+        })
+    
+    # Ordenar por última visita (más reciente primero)
+    result.sort(key=lambda x: x['stats']['last_visit'] or '', reverse=True)
+    
+    return {
+        "seller_id": seller_id,
+        "period_months": months,
+        "total_clients": len(result),
+        "clients": result
+    }
+
+
+# ==============================================================================
+# ENDPOINT 5: RESUMEN DEL VENDEDOR (KPIs)
+# ==============================================================================
+
+@app.get("/seller/{seller_id}/summary/")
+def get_seller_summary(
+    seller_id: str,
+    months: int = Query(default=3, ge=1, le=6),
+    db: Session = Depends(get_db)
+):
+    """
+    ✅ RESUMEN/KPIs DEL VENDEDOR
+    
+    Métricas del período:
+    - Total visitas
+    - Desglose por resultado (venta, no_venta, interesado, seguimiento, ausente)
+    - Tasa de conversión
+    - Distancia promedio
+    - Rutas aplazadas
+    """
+    from sqlalchemy import func
+    
+    try:
+        seller_uuid = uuid.UUID(seller_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"seller_id inválido: {seller_id}")
+    
+    date_limit = datetime.utcnow() - timedelta(days=months * 30)
+    
+    # Estadísticas de visitas
+    visit_stats = db.query(
+        func.count(Visit.id).label('total'),
+        func.count(Visit.id).filter(Visit.visit_result == 'venta').label('ventas'),
+        func.count(Visit.id).filter(Visit.visit_result == 'no_venta').label('no_ventas'),
+        func.count(Visit.id).filter(Visit.visit_result == 'interesado').label('interesados'),
+        func.count(Visit.id).filter(Visit.visit_result == 'seguimiento').label('seguimientos'),
+        func.count(Visit.id).filter(Visit.visit_result == 'ausente').label('ausentes'),
+        func.avg(Visit.checkin_distance_meters).label('avg_distance'),
+        func.count(Visit.id).filter(Visit.checkin_is_valid == True).label('valid_checkins'),
+        func.count(Visit.id).filter(Visit.checkin_is_valid == False).label('invalid_checkins')
+    ).filter(
+        Visit.seller_id == seller_uuid,
+        Visit.checkin_time >= date_limit
+    ).first()
+    
+    # Rutas aplazadas
+    postponed = db.query(func.count(Route.id)).filter(
+        Route.seller_id == seller_uuid,
+        Route.planned_date >= date_limit,
+        Route.status == 'postponed'
+    ).scalar() or 0
+    
+    # Calcular tasa de conversión
+    effective_visits = (visit_stats.total or 0) - (visit_stats.ausentes or 0)
+    conversion_rate = 0
+    if effective_visits > 0:
+        conversion_rate = round(((visit_stats.ventas or 0) / effective_visits) * 100, 1)
+    
+    # Tasa de cumplimiento (check-ins válidos)
+    compliance_rate = 0
+    if visit_stats.total > 0:
+        compliance_rate = round(((visit_stats.valid_checkins or 0) / visit_stats.total) * 100, 1)
+    
+    return {
+        "seller_id": seller_id,
+        "period_months": months,
+        "visits": {
+            "total": visit_stats.total or 0,
+            "ventas": visit_stats.ventas or 0,
+            "no_ventas": visit_stats.no_ventas or 0,
+            "interesados": visit_stats.interesados or 0,
+            "seguimientos": visit_stats.seguimientos or 0,
+            "ausentes": visit_stats.ausentes or 0
+        },
+        "metrics": {
+            "conversion_rate": f"{conversion_rate}%",
+            "compliance_rate": f"{compliance_rate}%",
+            "avg_distance_meters": round(visit_stats.avg_distance or 0, 1),
+            "valid_checkins": visit_stats.valid_checkins or 0,
+            "invalid_checkins": visit_stats.invalid_checkins or 0,
+            "routes_postponed": postponed
+        }
+    }
+
 # ============================================================================
 # ✅ CHECK-IN/CHECK-OUT REDISEÑADO CON VALIDACIÓN ROBUSTA
 # ============================================================================

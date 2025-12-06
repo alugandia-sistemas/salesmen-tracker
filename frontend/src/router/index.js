@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Login from '../views/Login.vue'
 import Registro from '../views/Registro.vue'
 import RegistroConToken from '../views/RegistroConToken.vue'
-import Comercial from '../views/Comercial.vue'
+import ComercialV2 from '../views/ComercialV2.vue'
 import AdminGestion from '../views/AdminGestion.vue'
 import AdminInvitaciones from '../views/AdminInvitaciones.vue'
 import DirectorioClientes from '../views/DirectorioClientes.vue'
@@ -27,9 +27,10 @@ const routes = [
   },
 
   // Vendedor
+  // Reemplazar la ruta /comercial
   { 
     path: '/comercial', 
-    component: Comercial,
+    component: ComercialV2,  // Cambiar de Comercial a ComercialV2
     meta: { requiresAuth: true }
   },
 
