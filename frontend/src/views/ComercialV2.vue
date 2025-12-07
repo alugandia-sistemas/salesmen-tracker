@@ -21,7 +21,7 @@
                <div class="flex items-center gap-2 mt-1">
                   <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                   <p class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{{ sellerName
-                  }}</p>
+                     }}</p>
                </div>
             </div>
 
@@ -186,34 +186,102 @@
                   </div>
 
                   <!-- TAB: CLIENTES (Global Directory) -->
-                  <div v-else-if="activeTab === 'clientes'" key="clientes">
-                     <div class="mb-6">
-                        <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Directorio de Clientes</h2>
-                        <input v-model="searchQuery" type="text" placeholder="🔍 Buscar cliente..."
-                           class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold text-slate-900 dark:text-white shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  <div v-else-if="activeTab === 'clientes'" key="clientes" class="pb-24">
+                     <div class="mb-6 sticky top-0 bg-slate-50 dark:bg-slate-900 pt-4 pb-2 z-40">
+                        <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4 px-4">Directorio de Clientes
+                        </h2>
+                        <div class="px-4">
+                           <input v-model="searchQuery" type="text" placeholder="🔍 Buscar cliente..."
+                              class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold text-slate-900 dark:text-white shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        </div>
+
+                        <!-- Quick Group Nav -->
+                        <div v-if="!searchQuery" class="mt-4 px-4 overflow-x-auto no-scrollbar">
+                           <div class="flex gap-2 min-w-max">
+                              <button v-for="grupo in gruposAlfabeticos" :key="grupo.id"
+                                 @click="scrollToGroup(grupo.id)" :class="[
+                                    'px-3 py-2 rounded-lg text-sm font-bold transition whitespace-nowrap border',
+                                    grupoActivo === grupo.id
+                                       ? 'bg-indigo-600 text-white border-indigo-600'
+                                       : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                                 ]">
+                                 {{ grupo.label }}
+                                 <span class="ml-1 text-xs opacity-70">({{ contarClientesEnGrupo(grupo.letras)
+                                    }})</span>
+                              </button>
+                           </div>
+                        </div>
                      </div>
 
-                     <div v-if="filteredClients.length > 0" class="space-y-3">
-                        <div v-for="client in filteredClients" :key="client.id"
-                           class="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
-                           <div class="flex justify-between items-start mb-2">
-                              <h3 class="font-bold text-slate-900 dark:text-white text-lg">{{ client.name }}</h3>
-                              <span
-                                 class="text-xs font-bold px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                 {{ client.client_type || 'Cliente' }}
-                              </span>
-                           </div>
-                           <p class="text-slate-500 dark:text-slate-400 text-sm mb-3">📍 {{ client.address }}</p>
+                     <div v-if="filteredClients.length > 0">
+                        <!-- Grouped View -->
+                        <div v-if="!searchQuery">
+                           <div v-for="grupo in gruposAlfabeticos" :key="grupo.id" :id="'grupo-' + grupo.id"
+                              class="mb-6">
+                              <!-- Group Header (Only if has clients) -->
+                              <div v-if="clientesEnGrupo(grupo.letras).length > 0"
+                                 class="px-4 mb-2 sticky top-36 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm z-30 py-2">
+                                 <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                    {{ grupo.label }}
+                                    <span
+                                       class="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs px-2 py-0.5 rounded-full">
+                                       {{ clientesEnGrupo(grupo.letras).length }}
+                                    </span>
+                                 </h3>
+                              </div>
 
-                           <div class="flex gap-2">
-                              <button @click="addStopNow(client)"
-                                 class="flex-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-bold text-xs py-2 rounded-lg">
-                                 + Añadir a Ruta
-                              </button>
-                              <a :href="'tel:' + client.phone"
-                                 class="flex-1 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs py-2 rounded-lg text-center">
-                                 📞 Llamar
-                              </a>
+                              <div class="space-y-3 px-4">
+                                 <div v-for="client in clientesEnGrupo(grupo.letras)" :key="client.id"
+                                    class="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+                                    <div class="flex justify-between items-start mb-2">
+                                       <h3 class="font-bold text-slate-900 dark:text-white text-lg">{{ client.name }}
+                                       </h3>
+                                       <span
+                                          class="text-xs font-bold px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                          {{ client.client_type || 'Cliente' }}
+                                       </span>
+                                    </div>
+                                    <p class="text-slate-500 dark:text-slate-400 text-sm mb-3">📍 {{ client.address }}
+                                    </p>
+
+                                    <div class="flex gap-2">
+                                       <button @click="addStopNow(client)"
+                                          class="flex-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-bold text-xs py-2 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition">
+                                          + Añadir a Ruta
+                                       </button>
+                                       <a :href="'tel:' + client.phone"
+                                          class="flex-1 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs py-2 rounded-lg text-center hover:bg-slate-100 dark:hover:bg-slate-600 transition">
+                                          📞 Llamar
+                                       </a>
+                                    </div>
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
+
+                        <!-- Search Results (Flat list) -->
+                        <div v-else class="space-y-3 px-4">
+                           <div v-for="client in filteredClients" :key="client.id"
+                              class="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+                              <div class="flex justify-between items-start mb-2">
+                                 <h3 class="font-bold text-slate-900 dark:text-white text-lg">{{ client.name }}</h3>
+                                 <span
+                                    class="text-xs font-bold px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                    {{ client.client_type || 'Cliente' }}
+                                 </span>
+                              </div>
+                              <p class="text-slate-500 dark:text-slate-400 text-sm mb-3">📍 {{ client.address }}</p>
+
+                              <div class="flex gap-2">
+                                 <button @click="addStopNow(client)"
+                                    class="flex-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-bold text-xs py-2 rounded-lg">
+                                    + Añadir a Ruta
+                                 </button>
+                                 <a :href="'tel:' + client.phone"
+                                    class="flex-1 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs py-2 rounded-lg text-center">
+                                    📞 Llamar
+                                 </a>
+                              </div>
                            </div>
                         </div>
                      </div>
@@ -231,7 +299,7 @@
                         <div
                            class="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl flex flex-col items-center justify-center text-center">
                            <span class="text-3xl font-black text-indigo-600 dark:text-indigo-400">{{ stats.total_visits
-                           }}</span>
+                              }}</span>
                            <span
                               class="text-xs font-bold text-indigo-800 dark:text-indigo-200 uppercase tracking-wide">Visitas
                               Totales</span>
@@ -423,6 +491,19 @@ export default {
          searchQuery: '',
          selectedDate: '',
          stats: null,
+
+         // Directory Grouping
+         grupoActivo: 'ac',
+         gruposAlfabeticos: [
+            { id: 'ac', label: 'A–C', letras: ['A', 'B', 'C'] },
+            { id: 'df', label: 'D–F', letras: ['D', 'E', 'F'] },
+            { id: 'gi', label: 'G–I', letras: ['G', 'H', 'I'] },
+            { id: 'jl', label: 'J–L', letras: ['J', 'K', 'L'] },
+            { id: 'mo', label: 'M–O', letras: ['M', 'N', 'O'] },
+            { id: 'pr', label: 'P–R', letras: ['P', 'Q', 'R'] },
+            { id: 'st', label: 'S–T', letras: ['S', 'T'] },
+            { id: 'uz', label: 'U–Z', letras: ['U', 'V', 'W', 'X', 'Y', 'Z'] }
+         ],
 
          // Modal State
          showCheckinModal: false,
@@ -650,6 +731,25 @@ export default {
          }
          return map[status] || 'bg-gray-100'
       },
+      clientesEnGrupo(letras) {
+         return this.filteredClients.filter(c => {
+            const inicial = c.name.charAt(0).toUpperCase()
+            return letras.includes(inicial)
+         })
+      },
+
+      contarClientesEnGrupo(letras) {
+         return this.clientesEnGrupo(letras).length
+      },
+
+      scrollToGroup(grupoId) {
+         this.grupoActivo = grupoId
+         const element = document.getElementById('grupo-' + grupoId)
+         if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+         }
+      },
+
       logout() {
          localStorage.removeItem('seller')
          localStorage.removeItem('token')
