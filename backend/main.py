@@ -124,6 +124,14 @@ async def startup_event():
                 conn.execute(text("ALTER TABLE clients ADD COLUMN sales_route_id UUID REFERENCES sales_routes(id)"))
                 conn.commit()
                 print("✅ Migration done.")
+                
+            # Check if routes table has visit_order
+            result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='routes' AND column_name='visit_order'"))
+            if not result.fetchone():
+                print("⚠️ Migrating: Adding visit_order to routes...")
+                conn.execute(text("ALTER TABLE routes ADD COLUMN visit_order INTEGER DEFAULT 0"))
+                conn.commit()
+                print("✅ Migration done (visit_order).")
     except Exception as e:
         print(f"Migration warning: {e}")
 
@@ -143,9 +151,9 @@ class Seller(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relaciones
-    routes = relationship("Route", back_populates="seller")
-    visits = relationship("Visit", back_populates="seller")
-    opportunities = relationship("Opportunity", back_populates="seller")
+    routes = relationship("Route", back_populates="seller", cascade="all, delete-orphan")
+    visits = relationship("Visit", back_populates="seller", cascade="all, delete-orphan")
+    opportunities = relationship("Opportunity", back_populates="seller", cascade="all, delete-orphan")
     sales_routes = relationship("SalesRoute", back_populates="seller")
 
 
@@ -192,7 +200,11 @@ class Route(Base):
     original_planned_date = Column(DateTime, nullable=True)
     postponed_at = Column(DateTime, nullable=True)
     postpone_notes = Column(String(255), nullable=True)
+    postpone_notes = Column(String(255), nullable=True)
     times_postponed = Column(Integer, default=0)
+    
+    # ✅ NUEVO CAMPOS v4
+    visit_order = Column(Integer, default=0)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -759,6 +771,64 @@ def delete_seller(seller_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=f"Error eliminando vendedor: {str(e)}")
 
 
+class SellerStatsResponse(BaseModel):
+    total_visits: int
+    valid_visits: int
+    incidents: int
+    completion_rate: float
+    fraud_alerts: int
+    start_date: datetime
+    end_date: datetime
+
+
+@app.get("/sellers/{seller_id}/stats", response_model=SellerStatsResponse)
+def get_seller_stats(seller_id: str, days: int = 14, db: Session = Depends(get_db)):
+    """
+    Obtener estadísticas del vendedor de los últimos N días (default 14).
+    Metricas: Visitas totales, válidas, incidentes (invalidas), flags de fraude.
+    """
+    try:
+        seller_uuid = uuid.UUID(seller_id)
+        
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+        
+        # Query Visits
+        visits = db.query(Visit).filter(
+            Visit.seller_id == seller_uuid,
+            Visit.created_at >= start_date
+        ).all()
+        
+        total = len(visits)
+        valid = sum(1 for v in visits if v.checkin_is_valid)
+        invalid = total - valid
+        
+        # Count Fraud Flags (simple logic: if field is not null/empty)
+        fraud = sum(1 for v in visits if v.fraud_flags and len(str(v.fraud_flags)) > 2) # "> 2" assumes "[]" or empty string
+        
+        # Incident = Invalid OR Fraud
+        # Note: Usually invalid covers most, but fraud might drift. 
+        # Requirement said "incident tickets". We count invalid checkins as main incidents.
+        incidents = invalid
+        
+        rate = (valid / total * 100) if total > 0 else 0.0
+        
+        return {
+            "total_visits": total,
+            "valid_visits": valid,
+            "incidents": incidents,
+            "completion_rate": round(rate, 1),
+            "fraud_alerts": fraud,
+            "start_date": start_date,
+            "end_date": end_date
+        }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Seller ID")
+    except Exception as e:
+        print(f"Stats Error: {e}")
+        raise HTTPException(status_code=500, detail="Error calculating stats")
+
+
 # --- CLIENTES ---
 
 @app.get("/clients/")
@@ -1169,8 +1239,38 @@ def update_route(
         "client_id": str(route.client_id),
         "planned_date": route.planned_date.isoformat(),
         "status": route.status,
+        "visit_order": route.visit_order, # Include visit_order in response
         "message": "Ruta actualizada"
     }
+
+
+# ==============================================================================
+# ENDPOINT 4: REORDENAR RUTAS
+# ==============================================================================
+
+class ReorderRequest(BaseModel):
+    route_ids: List[str]
+
+@app.put("/routes/reorder/")
+def reorder_routes(
+    request: ReorderRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Actualiza el orden de las rutas recibidas en route_ids.
+    Asigna 0 al primero, 1 al segundo, etc.
+    """
+    for index, route_id_str in enumerate(request.route_ids):
+        try:
+            r_id = uuid.UUID(route_id_str)
+            # Use synchronize_session=False for bulk update without loading objects
+            db.query(Route).filter(Route.id == r_id).update({"visit_order": index}, synchronize_session=False)
+        except ValueError:
+            # Log error or handle as needed, for now continue to next
+            continue
+            
+    db.commit()
+    return {"message": "Routes reordered successfully"}
 
 
 @app.delete("/routes/{route_id}")
@@ -1460,8 +1560,8 @@ def get_seller_route_history(
     if status:
         query = query.filter(Route.status == status)
     
-    # Ordenar por fecha descendente
-    query = query.order_by(Route.planned_date.desc())
+    # Ordenar por fecha descendente y luego por visit_order
+    query = query.order_by(Route.planned_date.desc(), Route.visit_order.asc())
     
     # Contar total antes de paginar
     total = query.count()
