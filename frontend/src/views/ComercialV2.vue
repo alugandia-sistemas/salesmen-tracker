@@ -44,7 +44,7 @@
          <aside
             class="absolute md:relative inset-y-0 left-0 w-3/4 md:w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col shadow-2xl z-30 transition-transform duration-300 transform"
             :class="showSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'">
-            <div class="p-4 space-y-2">
+            <div class="p-4 space-y-2 flex-1">
                <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id; showSidebar = false" :class="[
                   'w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm',
                   activeTab === tab.id
@@ -53,6 +53,14 @@
                ]">
                   <span class="text-xl">{{ tab.icon }}</span>
                   <span>{{ tab.label }}</span>
+               </button>
+            </div>
+
+            <div class="p-4 border-t border-slate-200 dark:border-slate-700">
+               <button @click="logout"
+                  class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20">
+                  <span class="text-xl">🚪</span>
+                  <span>Cerrar Sesión</span>
                </button>
             </div>
          </aside>
@@ -644,6 +652,7 @@ export default {
       },
       logout() {
          localStorage.removeItem('seller')
+         localStorage.removeItem('token')
          this.$router.push('/login')
       },
       mostrarAplazar(ruta) {
