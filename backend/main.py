@@ -2465,9 +2465,12 @@ if __name__ == "__main__":
 
 @app.post("/zones/", response_model=ZoneResponse)
 def create_zone(zone: ZoneCreate, db: Session = Depends(get_db)):
-    # Convert geometry string/dict to WKT/WKB if needed, for now assuming simple polygon or null
-    # If using GeoAlchemy2, we can pass WKT string directly to geometry column usually
-    new_zone = Zone(name=zone.name, geometry=zone.geometry)
+    # Use ST_GeomFromText to ensure SRID 4326 and validity
+    geom = None
+    if zone.geometry:
+         geom = func.ST_GeomFromText(zone.geometry, 4326)
+         
+    new_zone = Zone(name=zone.name, geometry=geom)
     db.add(new_zone)
     db.commit()
     db.refresh(new_zone)

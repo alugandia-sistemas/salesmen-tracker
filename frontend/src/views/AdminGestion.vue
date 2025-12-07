@@ -1,396 +1,402 @@
 <template>
-  <div class="min-h-screen bg-white">
+  <div class="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden relative">
+    
     <!-- Header -->
-    <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
-      <div class="px-4 py-4">
-        <div class="flex justify-between items-center mb-4">
-          <h1 class="text-2xl font-bold text-gray-900">Alugandia</h1>
-          <button @click="logout" class="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-800 transition">
-            Salir
-          </button>
+    <header class="bg-slate-900 text-white p-4 flex justify-between items-center z-[50] shadow-lg border-b border-slate-800 shrink-0 h-16">
+      <div class="flex items-center gap-3">
+        <!-- Mobile Sidebar Toggle -->
+        <button @click="toggleSidebar" class="md:hidden text-white p-1 rounded hover:bg-slate-800">
+           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+           </svg>
+        </button>
+        
+        <h1 class="text-xl md:text-2xl font-bold bg-gradient-to-r from-indigo-400 to-indigo-200 bg-clip-text text-transparent">
+          Alugandia Admin
+        </h1>
+      </div>
+      <div>
+        <button @click="logout" class="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg text-sm font-bold transition-colors border border-slate-700">
+          Salir
+        </button>
+      </div>
+    </header>
+
+    <div class="flex-1 flex relative overflow-hidden">
+      
+      <!-- Mobile Backdrop -->
+      <div 
+        v-if="showSidebar" 
+        @click="showSidebar = false"
+        class="absolute inset-0 bg-black/50 z-20 md:hidden backdrop-blur-sm transition-opacity"
+      ></div>
+
+      <!-- Sidebar Navigation -->
+      <aside 
+         class="absolute md:relative inset-y-0 left-0 w-3/4 md:w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col shadow-2xl z-30 transition-transform duration-300 transform"
+         :class="showSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
+      >
+        <div class="p-4 space-y-1 flex-1 overflow-y-auto">
+           <p class="px-4 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Gestión</p>
+           
+           <button 
+             @click="activeTab = 'vendedores'; showSidebar = false"
+             :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm', activeTab === 'vendedores' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700']"
+           >
+             <span class="text-xl">👥</span> Vendedores
+           </button>
+           
+           <button 
+             @click="activeTab = 'clientes'; showSidebar = false"
+             :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm', activeTab === 'clientes' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700']"
+           >
+             <span class="text-xl">🏢</span> Clientes
+           </button>
+           
+           <button 
+             @click="activeTab = 'rutas'; showSidebar = false"
+             :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm', activeTab === 'rutas' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700']"
+           >
+             <span class="text-xl">🗺️</span> Rutas
+           </button>
+           
+           <div class="my-4 border-t border-slate-100 dark:border-slate-700"></div>
+           <p class="px-4 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Accesos</p>
+
+           <button 
+             @click="$router.push('/admin/invitaciones')"
+             class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-sm transition-all"
+           >
+             <span class="text-xl">📧</span> Invitaciones
+           </button>
+           
+           <button 
+             @click="$router.push('/admin/zones')"
+             class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 font-bold text-sm transition-all"
+           >
+             <span class="text-xl">🌍</span> Mapa Zonas
+           </button>
         </div>
-        <p class="text-gray-600 text-sm">Panel de Administración</p>
-      </div>
-    </nav>
+      </aside>
 
-    <!-- Tabs/Navigation -->
-    <div class="bg-white border-b border-gray-200 sticky top-16 z-40">
-      <div class="px-4 py-0 flex gap-0 overflow-x-auto">
-        <button 
-          @click="activeTab = 'vendedores'"
-          :class="[
-            'px-4 py-4 font-semibold text-sm border-b-2 transition whitespace-nowrap',
-            activeTab === 'vendedores' 
-              ? 'border-gray-900 text-gray-900' 
-              : 'border-transparent text-gray-600 hover:text-gray-900'
-          ]"
-        >
-          👥 Vendedores
-        </button>     
-        <button 
-          @click="activeTab = 'clientes'"
-          :class="[
-            'px-4 py-4 font-semibold text-sm border-b-2 transition whitespace-nowrap',
-            activeTab === 'clientes' 
-              ? 'border-gray-900 text-gray-900' 
-              : 'border-transparent text-gray-600 hover:text-gray-900'
-          ]"
-        >
-          🏢 Clientes
-        </button>
-        <button 
-          @click="activeTab = 'rutas'"
-          :class="[
-            'px-4 py-4 font-semibold text-sm border-b-2 transition whitespace-nowrap',
-            activeTab === 'rutas' 
-              ? 'border-gray-900 text-gray-900' 
-              : 'border-transparent text-gray-600 hover:text-gray-900'
-          ]"
-        >
-          🗺️ Rutas
-        </button>
-
-        <button 
-          @click="$router.push('/admin/invitaciones')"
-          class="px-4 py-4 font-semibold text-sm border-b-2 border-transparent text-gray-600 hover:text-gray-900 transition whitespace-nowrap"
-        >
-          📧 Invitaciones
-        </button>
-        <button 
-          @click="$router.push('/admin/zones')"
-          class="px-4 py-4 font-semibold text-sm border-b-2 border-transparent text-gray-600 hover:text-gray-900 transition whitespace-nowrap"
-        >
-          🌍 Zonas
-        </button>
-      </div>
+      <!-- Main Content -->
+      <main class="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900 w-full relative">
+        <div class="max-w-5xl mx-auto p-4 md:p-8 pb-24 md:pb-8">
+          
+          <!-- VENDEDORES TAB -->
+          <transition name="fade" mode="out-in">
+          <div v-if="activeTab === 'vendedores'" key="vendedores">
+            <div class="flex justify-between items-center mb-6">
+              <h2 class="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">Vendedores</h2>
+              <button 
+                @click="showVendedorModal = true" 
+                class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-500 transition text-sm flex items-center gap-2"
+              >
+                <span>+</span> <span class="hidden md:inline">Nuevo Vendedor</span>
+              </button>
+            </div>
+    
+            <div v-if="vendedores.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div v-for="vendedor in vendedores" :key="vendedor.id" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5 shadow-sm hover:shadow-md transition">
+                <div class="flex items-start gap-4 mb-4">
+                  <div class="w-12 h-12 bg-slate-900 dark:bg-indigo-900 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-lg">
+                    {{ vendedor.name.charAt(0).toUpperCase() }}
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white truncate">{{ vendedor.name }}</h3>
+                    <p class="text-slate-500 dark:text-slate-400 text-sm truncate">{{ vendedor.email }}</p>
+                  </div>
+                </div>
+                <div class="space-y-2 mb-4">
+                  <p class="text-slate-700 dark:text-slate-300 text-sm flex items-center gap-2">📞 {{ vendedor.phone }}</p>
+                  <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide"
+                    :class="vendedor.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'">
+                    {{ vendedor.is_active ? 'Activo' : 'Inactivo' }}
+                  </span>
+                </div>
+                <div class="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                  <button @click="editVendedor(vendedor)" class="flex-1 py-2 text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition">
+                    Editar
+                  </button>
+                  <button @click="deleteVendedor(vendedor.id)" class="flex-1 py-2 text-sm font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition">
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div v-else class="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
+              <p class="text-slate-500 dark:text-slate-400 mb-4">No hay vendedores registrados</p>
+              <button @click="showVendedorModal = true" class="text-indigo-600 font-bold hover:underline">Crear el primero</button>
+            </div>
+          </div>
+    
+          <!-- CLIENTES TAB -->
+          <div v-else-if="activeTab === 'clientes'" key="clientes">
+            <div class="flex justify-between items-center mb-6">
+              <h2 class="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">Clientes</h2>
+              <div class="flex gap-2">
+                 <button 
+                  @click="showClienteModal = true" 
+                  class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-500 transition text-sm flex items-center gap-2"
+                >
+                  <span>+</span> <span class="hidden md:inline">Nuevo Cliente</span>
+                </button>
+              </div>
+            </div>
+            
+             <!-- Stats Overview -->
+             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                <div class="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
+                  <span class="block text-2xl font-bold text-slate-900 dark:text-white">{{ clientes.length }}</span>
+                  <span class="text-xs font-bold text-slate-500 uppercase">Total</span>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
+                  <span class="block text-2xl font-bold text-slate-900 dark:text-white">{{ contarPorTipo('carpintero_metalico') }}</span>
+                  <span class="text-xs font-bold text-slate-500 uppercase">Carpinteros</span>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
+                  <span class="block text-2xl font-bold text-slate-900 dark:text-white">{{ contarPorTipo('cristalero') }}</span>
+                  <span class="text-xs font-bold text-slate-500 uppercase">Cristaleros</span>
+                </div>
+             </div>
+    
+            <!-- Recientes List -->
+            <h3 class="text-sm font-bold text-slate-500 uppercase mb-3 px-1">Añadidos Recientemente</h3>
+            <div v-if="clientes.length > 0" class="space-y-3">
+              <div v-for="cliente in clientesRecientes" :key="cliente.id" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition flex items-center justify-between group">
+                <div class="flex items-center gap-4 min-w-0">
+                  <div class="w-10 h-10 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0 text-slate-600 dark:text-slate-300 font-bold">
+                    {{ cliente.name.charAt(0).toUpperCase() }}
+                  </div>
+                  <div class="min-w-0">
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white truncate">{{ cliente.name }}</h4>
+                    <p class="text-slate-500 dark:text-slate-400 text-sm truncate flex items-center gap-1">📍 {{ cliente.address }}</p>
+                  </div>
+                </div>
+                <button @click="editCliente(cliente)" class="p-2 text-slate-400 hover:text-indigo-600 transition">
+                   ✏️
+                </button>
+              </div>
+              
+              <button 
+                @click="$router.push('/admin/clientes')"
+                class="w-full py-3 mt-4 text-center text-indigo-600 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition border border-indigo-100 dark:border-indigo-900/30"
+              >
+                Ver Directorio Completo →
+              </button>
+            </div>
+            
+            <div v-else class="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
+               <p class="text-slate-500 mb-2">No tienes clientes aún.</p>
+               <button @click="showClienteModal = true" class="text-indigo-600 font-bold">Añadir Cliente</button>
+            </div>
+          </div>
+    
+          <!-- RUTAS TAB -->
+          <div v-else-if="activeTab === 'rutas'" key="rutas">
+            <div class="flex justify-between items-center mb-6">
+              <h2 class="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">Rutas</h2>
+              <button 
+                @click="showRutaModal = true" 
+                class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-500 transition text-sm flex items-center gap-2"
+              >
+                <span>+</span> <span class="hidden md:inline">Nueva Ruta</span>
+              </button>
+            </div>
+    
+            <div v-if="rutas.length > 0" class="space-y-3">
+              <div v-for="ruta in rutas" :key="ruta.id" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm relative overflow-hidden">
+                 <!-- Status Bar -->
+                 <div class="absolute left-0 top-0 bottom-0 w-1 bg-slate-200" :class="{
+                    'bg-slate-300': ruta.status === 'pending',
+                    'bg-emerald-500': ruta.status === 'completed',
+                    'bg-indigo-500': ruta.status === 'in_progress',
+                    'bg-rose-500': ruta.status === 'cancelled'
+                 }"></div>
+                 
+                 <div class="pl-3">
+                    <div class="flex justify-between items-start mb-2">
+                       <div>
+                          <p class="text-xs font-bold text-slate-500 uppercase tracking-wide">Vendedor</p>
+                          <h3 class="text-base font-bold text-slate-900 dark:text-white">{{ getNombreVendedor(ruta.seller_id) }}</h3>
+                       </div>
+                       <span class="px-2 py-1 rounded-md text-xs font-bold uppercase" :class="{
+                             'bg-slate-100 text-slate-600': ruta.status === 'pending',
+                             'bg-emerald-100 text-emerald-700': ruta.status === 'completed',
+                             'bg-indigo-100 text-indigo-700': ruta.status === 'in_progress',
+                             'bg-rose-100 text-rose-700': ruta.status === 'cancelled'
+                       }">
+                         {{ ruta.status }}
+                       </span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wide">Cliente</p>
+                        <p class="text-slate-700 dark:text-slate-300 font-medium">📍 {{ getNombreCliente(ruta.client_id) }}</p>
+                    </div>
+                    
+                    <div class="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-700">
+                        <span class="text-sm font-mono text-slate-500">{{ formatDate(ruta.planned_date) }}</span>
+                        <div class="flex gap-2">
+                           <button @click="editRuta(ruta)" class="text-indigo-600 font-bold text-sm hover:underline">Editar</button>
+                           <button @click="deleteRuta(ruta.id)" class="text-rose-600 font-bold text-sm hover:underline">Eliminar</button>
+                        </div>
+                    </div>
+                 </div>
+              </div>
+            </div>
+            
+            <div v-else class="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
+              <p class="text-slate-500 mb-2">No hay rutas asignadas.</p>
+              <button @click="showRutaModal = true" class="text-indigo-600 font-bold">Crear Ruta Manual</button>
+            </div>
+          </div>
+          </transition>
+        </div>
+      </main>
     </div>
 
-    <!-- Content -->
-    <div class="px-4 py-6 pb-20">
-      <!-- VENDEDORES TAB -->
-      <div v-if="activeTab === 'vendedores'">
-        <div class="mb-6">
-          <h2 class="text-3xl font-bold text-gray-900 mb-4">Vendedores</h2>
-          <button 
-            @click="showVendedorModal = true" 
-            class="w-full bg-gray-900 text-white py-4 rounded-xl font-semibold text-lg hover:bg-gray-800 transition"
-          >
-            + Nuevo Vendedor
-          </button>
-        </div>
-
-        <div v-if="vendedores.length > 0" class="space-y-3">
-          <div v-for="vendedor in vendedores" :key="vendedor.id" class="bg-white border-2 border-gray-200 rounded-xl p-5">
-            <div class="flex items-start gap-4 mb-4">
-              <div class="w-14 h-14 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
-                <span class="text-white font-bold text-lg">{{ vendedor.name.charAt(0).toUpperCase() }}</span>
-              </div>
-              <div class="flex-1 min-w-0">
-                <h3 class="text-lg font-bold text-gray-900">{{ vendedor.name }}</h3>
-                <p class="text-gray-600 text-sm truncate">{{ vendedor.email }}</p>
-              </div>
-            </div>
-            <div class="space-y-2 mb-4">
-              <p class="text-gray-700 text-sm">📞 {{ vendedor.phone }}</p>
-              <span class="inline-block px-3 py-1 rounded-full text-sm font-semibold"
-                :class="vendedor.is_active ? 'bg-gray-200 text-gray-900' : 'bg-gray-100 text-gray-600'">
-                {{ vendedor.is_active ? '✓ Activo' : '• Inactivo' }}
-              </span>
-            </div>
-            <div class="flex gap-2">
-              <button @click="editVendedor(vendedor)" class="flex-1 bg-gray-100 text-gray-900 py-3 rounded-lg font-semibold text-sm hover:bg-gray-200 transition">
-                Editar
-              </button>
-              <button @click="deleteVendedor(vendedor.id)" class="flex-1 bg-gray-900 text-white py-3 rounded-lg font-semibold text-sm hover:bg-gray-800 transition">
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </div>
-        <div v-else class="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center">
-          <p class="text-gray-600 text-sm mb-4">Sin vendedores registrados</p>
-          <button @click="showVendedorModal = true" class="w-full bg-gray-900 text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition">
-            Crear Vendedor
-          </button>
-        </div>
-      </div>
-
-      <!-- CLIENTES TAB -->
-      <div v-if="activeTab === 'clientes'">
-        <div class="mb-6">
-          <h2 class="text-3xl font-bold text-gray-900 mb-4">Clientes</h2>
-          
-          <!-- ✅ ACCESO RÁPIDO AL DIRECTORIO -->
-          <div class="grid grid-cols-2 gap-3 mb-4">
-            <button 
-              @click="$router.push('/admin/clientes')"
-              class="bg-gray-100 text-gray-900 border-2 border-gray-300 py-4 rounded-xl font-semibold text-base hover:bg-gray-200 transition"
-            >
-              📋 Directorio
-            </button>
-            <button 
-              @click="showClienteModal = true" 
-              class="bg-gray-900 text-white py-4 rounded-xl font-semibold text-base hover:bg-gray-800 transition"
-            >
-              + Nuevo Cliente
-            </button>
-          </div>
-
-          <!-- Stats rápidos -->
-          <div class="grid grid-cols-3 gap-2 mb-4">
-            <div class="bg-gray-50 rounded-lg p-3 text-center border border-gray-200">
-              <p class="text-2xl font-bold text-gray-900">{{ contarPorTipo('carpintero_metalico') }}</p>
-              <p class="text-xs text-gray-600">Carpinteros</p>
-            </div>
-            <div class="bg-gray-50 rounded-lg p-3 text-center border border-gray-200">
-              <p class="text-2xl font-bold text-gray-900">{{ contarPorTipo('cristalero') }}</p>
-              <p class="text-xs text-gray-600">Cristaleros</p>
-            </div>
-            <div class="bg-gray-50 rounded-lg p-3 text-center border border-gray-200">
-              <p class="text-2xl font-bold text-gray-900">{{ contarPorTipo('taller') }}</p>
-              <p class="text-xs text-gray-600">Talleres</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Lista resumida de clientes recientes -->
-        <h3 class="text-lg font-bold text-gray-900 mb-3">Clientes Recientes</h3>
-        <div v-if="clientes.length > 0" class="space-y-3">
-          <div v-for="cliente in clientesRecientes" :key="cliente.id" class="bg-white border-2 border-gray-200 rounded-xl p-4">
-            <div class="flex items-start gap-3">
-              <div class="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
-                <span class="text-white font-bold">{{ cliente.name.charAt(0).toUpperCase() }}</span>
-              </div>
-              <div class="flex-1 min-w-0">
-                <h4 class="text-base font-bold text-gray-900 truncate">{{ cliente.name }}</h4>
-                <p class="text-gray-600 text-sm truncate">{{ cliente.address }}</p>
-                <span class="px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 mt-1 inline-block">
-                  {{ getTipoCliente(cliente.client_type) }}
-                </span>
-              </div>
-              <button @click="editCliente(cliente)" class="text-gray-400 hover:text-gray-900">✏️</button>
-            </div>
-          </div>
-          
-          <button 
-            @click="$router.push('/admin/clientes')"
-            class="w-full bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold text-sm hover:bg-gray-200 transition"
-          >
-            Ver todos los clientes ({{ clientes.length }}) →
-          </button>
-        </div>
-        <div v-else class="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center">
-          <p class="text-gray-600 text-sm mb-4">Sin clientes registrados</p>
-          <button @click="showClienteModal = true" class="w-full bg-gray-900 text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition">
-            Crear Cliente
-          </button>
-        </div>
-      </div>
-
-      <!-- RUTAS TAB -->
-      <div v-if="activeTab === 'rutas'">
-        <div class="mb-6">
-          <h2 class="text-3xl font-bold text-gray-900 mb-4">Rutas</h2>
-          <button 
-            @click="showRutaModal = true" 
-            class="w-full bg-gray-900 text-white py-4 rounded-xl font-semibold text-lg hover:bg-gray-800 transition"
-          >
-            + Nueva Ruta
-          </button>
-        </div>
-
-        <div v-if="rutas.length > 0" class="space-y-3">
-          <div v-for="ruta in rutas" :key="ruta.id" class="bg-white border-2 border-gray-200 rounded-xl p-5">
-            <div class="mb-4">
-              <div class="flex justify-between items-start mb-2">
-                <h3 class="text-lg font-bold text-gray-900">{{ getNombreVendedor(ruta.seller_id) }}</h3>
-                <span class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-900">
-                  {{ ruta.status }}
-                </span>
-              </div>
-              <p class="text-gray-600 text-sm">📍 {{ getNombreCliente(ruta.client_id) }}</p>
-            </div>
-            <div class="space-y-2 mb-4">
-              <p class="text-gray-700 text-sm">📅 {{ formatDate(ruta.planned_date) }}</p>
-            </div>
-            <div class="flex gap-2">
-              <button @click="editRuta(ruta)" class="flex-1 bg-gray-100 text-gray-900 py-3 rounded-lg font-semibold text-sm hover:bg-gray-200 transition">
-                Editar
-              </button>
-              <button @click="deleteRuta(ruta.id)" class="flex-1 bg-gray-900 text-white py-3 rounded-lg font-semibold text-sm hover:bg-gray-800 transition">
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </div>
-        <div v-else class="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center">
-          <p class="text-gray-600 text-sm mb-4">Sin rutas registradas</p>
-          <button @click="showRutaModal = true" class="w-full bg-gray-900 text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition">
-            Crear Ruta
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- MODALES -->
+    <!-- MODALES (Re-styled minimally for consistency) -->
     <!-- Modal Vendedor -->
-    <div v-if="showVendedorModal" class="fixed inset-0 bg-black/40 flex items-end z-50">
-      <div class="w-full bg-white rounded-t-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-        <h3 class="text-2xl font-bold text-gray-900 mb-6">
+    <div v-if="showVendedorModal" class="fixed inset-0 bg-black/50 z-[60] flex items-end md:items-center justify-center backdrop-blur-sm p-0 md:p-4">
+      <div class="bg-white dark:bg-slate-900 w-full md:max-w-md md:rounded-2xl rounded-t-3xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-6">
           {{ editingVendedor ? 'Editar Vendedor' : 'Nuevo Vendedor' }}
         </h3>
-        <form @submit.prevent="saveVendedor" class="space-y-5">
+        <form @submit.prevent="saveVendedor" class="space-y-4">
           <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Nombre</label>
-            <input v-model="formVendedor.name" type="text" placeholder="Ej: Ernesto Arocas" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre</label>
+            <input v-model="formVendedor.name" type="text" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" required />
           </div>
 
           <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Email</label>
-            <input v-model="formVendedor.email" type="email" placeholder="ernesto@alugandia.com" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
+             <input v-model="formVendedor.email" type="email" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" required />
           </div>
 
           <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Teléfono</label>
-            <input v-model="formVendedor.phone" type="tel" placeholder="+34 600 123 456" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Teléfono</label>
+             <input v-model="formVendedor.phone" type="tel" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" required />
           </div>
 
           <div class="flex items-center gap-3 py-2">
-            <input v-model="formVendedor.is_active" type="checkbox" id="vendedor-active" class="w-5 h-5 accent-gray-900" />
-            <label for="vendedor-active" class="text-gray-900 font-semibold">Vendedor Activo</label>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" v-model="formVendedor.is_active" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+              <span class="ml-3 text-sm font-bold text-slate-700 dark:text-slate-300">Vendedor Activo</span>
+            </label>
           </div>
-          <div class="flex gap-3 pt-6 border-t border-gray-200">
-            <button type="button" @click="closeVendedorModal()" class="flex-1 bg-gray-100 text-gray-900 py-4 rounded-lg font-semibold text-lg hover:bg-gray-200 transition">
-              Cancelar
-            </button>
-            <button type="submit" class="flex-1 bg-gray-900 text-white py-4 rounded-lg font-semibold text-lg hover:bg-gray-800 transition">
-              {{ editingVendedor ? 'Actualizar' : 'Crear' }}
-            </button>
+          
+          <div class="flex gap-3 pt-4">
+            <button type="button" @click="closeVendedorModal()" class="flex-1 py-3 text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancelar</button>
+            <button type="submit" class="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-500">{{ editingVendedor ? 'Guardar' : 'Crear' }}</button>
           </div>
         </form>
       </div>
     </div>
-
-    <!-- Modal Cliente -->
-    <div v-if="showClienteModal" class="fixed inset-0 bg-black/40 flex items-end z-50">
-      <div class="w-full bg-white rounded-t-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-        <h3 class="text-2xl font-bold text-gray-900 mb-6">
+    
+    <!-- Modal Cliente (Simplified Styles) -->
+    <div v-if="showClienteModal" class="fixed inset-0 bg-black/50 z-[60] flex items-end md:items-center justify-center backdrop-blur-sm p-0 md:p-4">
+      <div class="bg-white dark:bg-slate-900 w-full md:max-w-lg md:rounded-2xl rounded-t-3xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-4">
           {{ editingCliente ? 'Editar Cliente' : 'Nuevo Cliente' }}
         </h3>
-        <form @submit.prevent="saveCliente" class="space-y-5">
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Nombre del Cliente</label>
-            <input v-model="formCliente.name" type="text" placeholder="Ej: Cerrajería García" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
+        <form @submit.prevent="saveCliente" class="space-y-3">
+          <!-- Two col grid for basic info -->
+          <div class="grid grid-cols-2 gap-3">
+             <div class="col-span-2">
+                <label class="label-driver-sm">Nombre</label>
+                <input v-model="formCliente.name" type="text" class="input-driver-sm" required />
+             </div>
+             <div class="col-span-2">
+                <label class="label-driver-sm">Dirección</label>
+                <input v-model="formCliente.address" type="text" class="input-driver-sm" required />
+             </div>
+             <div>
+                <label class="label-driver-sm">Teléfono</label>
+                <input v-model="formCliente.phone" type="tel" class="input-driver-sm" required />
+             </div>
+             <div>
+                <label class="label-driver-sm">Tipo</label>
+                <select v-model="formCliente.client_type" class="input-driver-sm" required>
+                  <option value="">-- Selecciona --</option>
+                  <option value="carpintero_metalico">🔧 Carpintero</option>
+                  <option value="cristalero">🪟 Cristalero</option>
+                  <option value="taller">🏭 Taller</option>
+                  <option value="instalador">🔨 Instalador</option>
+                  <option value="cerrajero">🔑 Cerrajero</option>
+                  <option value="constructor">🏗️ Constructor</option>
+                  <option value="otros">📦 Otros</option>
+                </select>
+             </div>
+          </div>
+          
+          <!-- Geo Section -->
+          <div class="bg-indigo-50 dark:bg-slate-800 rounded-xl p-4 border border-indigo-100 dark:border-slate-700">
+             <h4 class="text-xs font-bold text-indigo-800 dark:text-indigo-400 uppercase mb-2">📍 Coordenadas</h4>
+             <div class="grid grid-cols-2 gap-3">
+                <div>
+                   <label class="text-xs font-bold text-slate-500">Latitud</label>
+                   <input v-model.number="formCliente.latitude" type="number" step="0.0001" class="input-driver-sm bg-white dark:bg-slate-900" required />
+                </div>
+                <div>
+                   <label class="text-xs font-bold text-slate-500">Longitud</label>
+                   <input v-model.number="formCliente.longitude" type="number" step="0.0001" class="input-driver-sm bg-white dark:bg-slate-900" required />
+                </div>
+             </div>
+             <p class="text-[10px] text-slate-500 mt-2">Usa Google Maps para obtener las coordenadas exactas.</p>
           </div>
 
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Dirección</label>
-            <input v-model="formCliente.address" type="text" placeholder="Ej: Calle Principal 123, Real de Gandia" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Teléfono</label>
-            <input v-model="formCliente.phone" type="tel" placeholder="+34 600 123 456" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Email</label>
-            <input v-model="formCliente.email" type="email" placeholder="info@cliente.com" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" />
-          </div>
-
-          <!-- ✅ CATEGORÍAS ACTUALIZADAS -->
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Tipo de Cliente</label>
-            <select v-model="formCliente.client_type" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
-              <option value="">-- Selecciona tipo --</option>
-              <option value="carpintero_metalico">🔧 Carpintero Metálico</option>
-              <option value="cristalero">🪟 Cristalero</option>
-              <option value="taller">🏭 Taller Industrial</option>
-              <option value="instalador">🔨 Instalador</option>
-              <option value="cerrajero">🔑 Cerrajero</option>
-              <option value="constructor">🏗️ Constructor</option>
-              <option value="otros">📦 Otros</option>
-            </select>
-          </div>
-
-          <!-- GEOLOCALIZACIÓN -->
-          <div class="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mt-6 mb-4">
-            <h4 class="font-bold text-blue-900 text-sm mb-2">📍 Geolocalización (PostGIS)</h4>
-            <p class="text-blue-800 text-xs mb-3">Necesario para check-in geolocalizado de vendedores</p>
-
-            <div>
-              <label class="block text-sm font-semibold text-gray-900 mb-2">Latitud</label>
-              <input v-model.number="formCliente.latitude" type="number" placeholder="39.2000" step="0.0001" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-              <p class="text-gray-500 text-xs mt-1">Ej: 39.2000 (Real de Gandia)</p>
-            </div>
-
-            <div class="mt-3">
-              <label class="block text-sm font-semibold text-gray-900 mb-2">Longitud</label>
-              <input v-model.number="formCliente.longitude" type="number" placeholder="-0.1500" step="0.0001" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-              <p class="text-gray-500 text-xs mt-1">Ej: -0.1500 (Real de Gandia)</p>
-            </div>
-
-            <p class="text-gray-600 text-xs mt-3 bg-gray-100 p-2 rounded">
-              💡 Tip: Obtén coordenadas en Google Maps → Click derecho → Copiar coordenadas
-            </p>
-          </div>
-          <div class="flex gap-3 pt-6 border-t border-gray-200">
-            <button type="button" @click="closeClienteModal()" class="flex-1 bg-gray-100 text-gray-900 py-4 rounded-lg font-semibold text-lg hover:bg-gray-200 transition">
-              Cancelar
-            </button>
-            <button type="submit" class="flex-1 bg-gray-900 text-white py-4 rounded-lg font-semibold text-lg hover:bg-gray-800 transition">
-              {{ editingCliente ? 'Actualizar' : 'Crear' }}
-            </button>
+          <div class="flex gap-3 pt-4">
+            <button type="button" @click="closeClienteModal()" class="flex-1 py-3 text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancelar</button>
+            <button type="submit" class="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-500">{{ editingCliente ? 'Guardar' : 'Crear' }}</button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- Modal Ruta -->
-    <div v-if="showRutaModal" class="fixed inset-0 bg-black/40 flex items-end z-50">
-      <div class="w-full bg-white rounded-t-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-        <h3 class="text-2xl font-bold text-gray-900 mb-6">
+    <!-- Modal Ruta (Simplified) -->
+    <div v-if="showRutaModal" class="fixed inset-0 bg-black/50 z-[60] flex items-end md:items-center justify-center backdrop-blur-sm p-0 md:p-4">
+      <div class="bg-white dark:bg-slate-900 w-full md:max-w-md md:rounded-2xl rounded-t-3xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-6">
           {{ editingRuta ? 'Editar Ruta' : 'Nueva Ruta' }}
         </h3>
-        <form @submit.prevent="saveRuta" class="space-y-5">
-          <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Vendedor</label>
-            <select v-model="formRuta.seller_id" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
-              <option value="">-- Selecciona vendedor --</option>
+        <form @submit.prevent="saveRuta" class="space-y-4">
+           <div>
+            <label class="label-driver-sm">Vendedor</label>
+            <select v-model="formRuta.seller_id" class="input-driver-sm" required>
+              <option value="">-- Selecciona --</option>
               <option v-for="v in vendedores" :key="v.id" :value="v.id">{{ v.name }}</option>
             </select>
           </div>
 
           <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Cliente</label>
-            <select v-model="formRuta.client_id" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
-              <option value="">-- Selecciona cliente --</option>
+            <label class="label-driver-sm">Cliente</label>
+            <select v-model="formRuta.client_id" class="input-driver-sm" required>
+              <option value="">-- Selecciona --</option>
               <option v-for="c in clientes" :key="c.id" :value="c.id">{{ c.name }}</option>
             </select>
           </div>
 
           <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Fecha de la Ruta</label>
-            <input v-model="formRuta.planned_date" type="date" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required />
-            <p class="text-gray-500 text-xs mt-1">Ej: 2025-12-02</p>
+            <label class="label-driver-sm">Fecha</label>
+            <input v-model="formRuta.planned_date" type="date" class="input-driver-sm" required />
           </div>
 
           <div>
-            <label class="block text-sm font-semibold text-gray-900 mb-2">Estado de la Ruta</label>
-            <select v-model="formRuta.status" class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900" required>
+            <label class="label-driver-sm">Estado</label>
+            <select v-model="formRuta.status" class="input-driver-sm" required>
               <option value="pending">⏳ Pendiente</option>
               <option value="in_progress">🚀 En Progreso</option>
               <option value="completed">✅ Completada</option>
               <option value="cancelled">❌ Cancelada</option>
             </select>
           </div>
-          <div class="flex gap-3 pt-6 border-t border-gray-200">
-            <button type="button" @click="closeRutaModal()" class="flex-1 bg-gray-100 text-gray-900 py-4 rounded-lg font-semibold text-lg hover:bg-gray-200 transition">
-              Cancelar
-            </button>
-            <button type="submit" class="flex-1 bg-gray-900 text-white py-4 rounded-lg font-semibold text-lg hover:bg-gray-800 transition">
-              {{ editingRuta ? 'Actualizar' : 'Crear' }}
-            </button>
+          
+          <div class="flex gap-3 pt-4">
+            <button type="button" @click="closeRutaModal()" class="flex-1 py-3 text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancelar</button>
+            <button type="submit" class="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-500">{{ editingRuta ? 'Guardar' : 'Crear' }}</button>
           </div>
         </form>
       </div>
@@ -404,6 +410,7 @@ export default {
   data() {
     return {
       activeTab: 'vendedores',
+      showSidebar: false, // NEW: Sidebar toggle
       vendedores: [],
       clientes: [],
       rutas: [],
@@ -454,6 +461,9 @@ export default {
     }
   },
   methods: {
+    toggleSidebar() {
+      this.showSidebar = !this.showSidebar
+    },
     async fetchVendedores() {
       try {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/sellers/`)
@@ -646,7 +656,10 @@ export default {
 </script>
 
 <style scoped>
-* {
-  -webkit-font-smoothing: antialiased;
+.label-driver-sm {
+  @apply block text-xs font-bold text-slate-500 uppercase mb-1;
+}
+.input-driver-sm {
+  @apply w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none;
 }
 </style>
