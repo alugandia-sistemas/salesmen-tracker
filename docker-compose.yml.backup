@@ -41,9 +41,7 @@ services:
       - app-network
 
   frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
+    image: node:18-alpine
     container_name: salesmen_tracker_frontend
     ports:
       - "5173:5173"
@@ -53,7 +51,7 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    command: sh -c "npm install @vercel/analytics @vercel/web-vitals && npm run dev -- --host 0.0.0.0"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     networks:
       - app-network
 

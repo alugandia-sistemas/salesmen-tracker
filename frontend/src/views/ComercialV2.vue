@@ -85,6 +85,40 @@
                         </button>
                      </div>
 
+                     <!-- Search Bar -->
+                     <div class="mb-4">
+                        <input v-model="routeSearchQuery" type="text" placeholder="🔍 Buscar por cliente..."
+                           class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold text-slate-900 dark:text-white shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                     </div>
+
+                     <!-- Daily Summary Stats -->
+                     <div class="grid grid-cols-3 gap-3 mb-4">
+                        <div class="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl text-center">
+                           <span class="block text-2xl font-black text-indigo-600 dark:text-indigo-400">{{
+                              todayStats.total }}</span>
+                           <span class="text-xs font-bold text-indigo-800 dark:text-indigo-200 uppercase">Total</span>
+                        </div>
+                        <div class="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl text-center">
+                           <span class="block text-2xl font-black text-emerald-600 dark:text-emerald-400">{{
+                              todayStats.completed }}</span>
+                           <span
+                              class="text-xs font-bold text-emerald-800 dark:text-emerald-200 uppercase">Completadas</span>
+                        </div>
+                        <div class="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-center">
+                           <span class="block text-2xl font-black text-slate-900 dark:text-white">{{
+                              todayStats.percentage }}%</span>
+                           <span class="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Progreso</span>
+                        </div>
+                     </div>
+
+                     <!-- Progress Bar -->
+                     <div class="mb-6">
+                        <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                           <div class="bg-emerald-500 h-full transition-all duration-500"
+                              :style="{ width: todayStats.percentage + '%' }"></div>
+                        </div>
+                     </div>
+
                      <div v-if="routesHoy.length > 0" class="space-y-4">
                         <div v-for="(ruta, index) in routesHoy" :key="ruta.id"
                            class="card-driver relative overflow-hidden group">
@@ -445,10 +479,17 @@
             <div class="p-4 border-b border-slate-100 dark:border-slate-800 space-y-3">
                <input v-model="searchQuery" type="text" placeholder="🔍 Buscar cliente..."
                   class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 font-bold outline-none" />
-               <div class="flex items-center gap-2">
-                  <span class="text-sm font-bold text-slate-500">Fecha:</span>
-                  <input v-model="selectedDate" type="date"
-                     class="flex-1 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 font-bold outline-none" />
+               <div class="grid grid-cols-2 gap-2">
+                  <div>
+                     <span class="text-xs font-bold text-slate-500 block mb-1">Fecha:</span>
+                     <input v-model="selectedDate" type="date"
+                        class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 font-bold outline-none" />
+                  </div>
+                  <div>
+                     <span class="text-xs font-bold text-slate-500 block mb-1">Hora:</span>
+                     <input v-model="selectedTime" type="time"
+                        class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 font-bold outline-none" />
+                  </div>
                </div>
             </div>
 
@@ -489,7 +530,9 @@ export default {
          historialRutas: [],
          myClients: [], // Stores all clients assigned to seller
          searchQuery: '',
+         routeSearchQuery: '', // Separate search for routes in Hoy tab
          selectedDate: '',
+         selectedTime: '', // Time for new route stops
          stats: null,
 
          // Directory Grouping
@@ -536,6 +579,19 @@ export default {
             c.name.toLowerCase().includes(lower) ||
             c.address.toLowerCase().includes(lower)
          )
+      },
+      filteredRoutesHoy() {
+         if (!this.routeSearchQuery) return this.routesHoy
+         const lower = this.routeSearchQuery.toLowerCase()
+         return this.routesHoy.filter(r =>
+            r.client?.name?.toLowerCase().includes(lower)
+         )
+      },
+      todayStats() {
+         const total = this.routesHoy.length
+         const completed = this.routesHoy.filter(r => r.status === 'completed').length
+         const percentage = total > 0 ? Math.round((completed / total) * 100) : 0
+         return { total, completed, percentage }
       }
    },
    mounted() {
@@ -614,6 +670,10 @@ export default {
          this.showAddStopModal = true
          this.searchQuery = ''
          this.selectedDate = new Date().toISOString().split('T')[0] // Default to today
+         // Default time to 1 hour from now
+         const now = new Date()
+         now.setHours(now.getHours() + 1)
+         this.selectedTime = now.toTimeString().slice(0, 5) // HH:MM format
       },
 
       async addStopNow(client) {
@@ -624,13 +684,19 @@ export default {
          if (!confirm(`¿Añadir parada para ${client.name} el ${this.selectedDate}?`)) return;
 
          try {
+            // ✅ Combine date and time into datetime string
+            let plannedDate = this.selectedDate
+            if (this.selectedTime) {
+               plannedDate = `${this.selectedDate}T${this.selectedTime}:00`
+            }
+
             const response = await fetch(`${import.meta.env.VITE_API_URL}/routes/`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
                body: JSON.stringify({
                   seller_id: this.seller.id,
                   client_id: client.id,
-                  planned_date: this.selectedDate,
+                  planned_date: plannedDate,
                   status: 'pending'
                })
             });

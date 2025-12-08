@@ -15,7 +15,7 @@
 **Salesmen Tracker** es una aplicación web moderna diseñada para **Alugandia** (empresa de distribución de perfiles de aluminio en Gandia, Valencia) que permite gestionar y hacer seguimiento en tiempo real de los vendedores en ruta.
 
 El sistema resuelve problemas críticos de gestión comercial:
-- ✅ Seguimiento GPS de visitas a clientes
+- ✅ Seguimiento de visitas a clientes
 - ✅ Validación de ubicación en check-in/check-out
 - ✅ Planificación y asignación de rutas
 - ✅ Cálculo automático de distancias con PostGIS
@@ -26,7 +26,7 @@ El sistema resuelve problemas críticos de gestión comercial:
 
 ## ✨ Características Principales
 
-### 🗺️ Geolocalización en Tiempo Real
+### 🗺️ Geolocalización de visitas
 - **Check-in/Check-out con GPS**: Captura automática de ubicación precisa
 - **Validación de distancia**: Calcula distancia entre ubicación del vendedor y cliente
 - **Consultas geoespaciales**: Encuentra clientes cercanos usando PostGIS
@@ -306,11 +306,7 @@ ST_DWithin(
 ## 🎯 Caso de Uso Real: Alugandia
 
 ### Contexto
-**Alugandia** es una empresa de distribución de perfiles de aluminio con:
-- 40 años de experiencia
-- 11 empleados
-- 600 clientes en la Comunidad Valenciana
-- 2 vendedores en ruta
+**Alugandia** es una empresa de distribución de perfiles de aluminio con 40 años de experiencia
 
 ### Problema a Resolver
 - ❌ Falta de visibilidad de visitas a clientes
@@ -321,15 +317,15 @@ ST_DWithin(
 ### Solución Implementada
 - ✅ Seguimiento GPS de cada visita
 - ✅ Validación automática de ubicación
-- ✅ Dashboard para gerencia con métricas
+- ✅ Dashboard con métricas
 - ✅ Planificación de rutas optimizada por proximidad
 - ✅ Registro completo de actividad comercial
 
 ### Datos de Prueba
 El sistema incluye datos de prueba de la zona:
-- **Vendedores**: Comercial Valencia 1, Comercial Alicante 1, Jose Manuel Gómez
-- **Clientes**: Carpinterías y empresas de aluminio en Comunitat Valenciana.
-- **Coordenadas GPS reales** de la Comunitat Valenciana
+- **Vendedores**
+- **Clientes**
+- **Coordenadas GPS reales**
 
 ---
 
@@ -517,10 +513,9 @@ of this software...
 
 **Alugandia - Jose Manuel Gómez**
 - 🌐 Empresa: [Alugandia SL](https://alugandia.es)
-- 📧 Email: jm@alugandia.es
+- 📧 Email: jmgomez@alugandia.es
 - 📍 Ubicación: Real de Gandia, Valencia, España
-- 💼 LinkedIn: [Jose Manuel Gómez](https://linkedin.com/in/tu-perfil)
-- 🐙 GitHub: [@tu-usuario](https://github.com/tu-usuario)
+- 💼 LinkedIn: [Jose Manuel Gómez](https://linkedin.com/in/jose-manuel-gomez)
 
 ---
 
@@ -537,7 +532,7 @@ of this software...
 ## 📞 Soporte
 
 Para preguntas o issues:
-- 📧 Email: soporte@alugandia.es
+- 📧 Email: info@alugandia.es
 - 🐛 Issues: [GitHub Issues](https://github.com/tu-usuario/salesmen-tracker/issues)
 - 📖 Docs: [Documentación completa](docs/)
 

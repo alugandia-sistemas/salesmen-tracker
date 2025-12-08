@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vercel/analytics": "^1.6.1",
     "vue": "^3.3.8",
     "vue-router": "^4.6.3"
   },
