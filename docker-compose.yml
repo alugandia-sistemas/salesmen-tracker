@@ -53,7 +53,7 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    command: sh -c "npm install @vercel/analytics @vercel/web-vitals && npm run dev -- --host 0.0.0.0"
+    command: sh -c "npm install @vercel/analytics web-vitals && npm run dev -- --host 0.0.0.0"
     networks:
       - app-network
 

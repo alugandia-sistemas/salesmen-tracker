@@ -4,36 +4,28 @@ import router from './router'
 import './assets/main.css'
 
 // ============================================================================
-// 📊 VERCEL ANALYTICS & WEB VITALS INTEGRATION
+// 📊 VERCEL ANALYTICS & WEB VITALS - IMPORTS CORRECTOS
 // ============================================================================
 
 import { inject } from '@vercel/analytics'
 inject()
 
-import { webVitals } from '@vercel/web-vitals'
+// ✅ IMPORTS CORRECTOS: web-vitals exporta getCLS, getFID, etc.
+// ❌ NO existe: import { webVitals }
+import { getCLS, getFID, getFCP, getLCP, getTTFB } from 'web-vitals'
 
-webVitals({
-  path: '/_vercel/insights/event',
-  params: {
-    beforeSend: (webVital) => {
-      console.log(
-        `[Web Vital] ${webVital.name}: ${webVital.value.toFixed(2)}ms`
-      )
-    }
-  }
-})
+// Reportar Web Vitals a consola
+getCLS(metric => console.log(`[Web Vital] CLS: ${metric.value.toFixed(3)}`))
+getFID(metric => console.log(`[Web Vital] FID: ${metric.value.toFixed(2)}ms`))
+getFCP(metric => console.log(`[Web Vital] FCP: ${metric.value.toFixed(2)}ms`))
+getLCP(metric => console.log(`[Web Vital] LCP: ${metric.value.toFixed(2)}ms`))
+getTTFB(metric => console.log(`[Web Vital] TTFB: ${metric.value.toFixed(2)}ms`))
 
-// ============================================================================
-// EVENTOS PERSONALIZADOS
-// ============================================================================
-
+// Helper global para tracking de eventos
 window.analytics = {
   trackEvent: (eventName, eventData) => {
-    const { Analytics } = window
-    if (Analytics && Analytics.event) {
-      Analytics.event(eventName, eventData)
-      console.log(`[Analytics Event] ${eventName}`, eventData)
-    }
+    console.log(`[Analytics] ${eventName}`, eventData)
+    // En producción, aquí irían los datos a Vercel Analytics
   },
   trackCheckin: (distance, isValid) => {
     window.analytics.trackEvent('checkin', {
@@ -41,18 +33,8 @@ window.analytics = {
       is_valid: isValid,
       timestamp: new Date().toISOString()
     })
-  },
-  trackVisit: (clientId, duration) => {
-    window.analytics.trackEvent('visit_completed', {
-      client_id: clientId,
-      duration_seconds: duration
-    })
   }
 }
-
-// ============================================================================
-// CREAR APP
-// ============================================================================
 
 const app = createApp(App)
 

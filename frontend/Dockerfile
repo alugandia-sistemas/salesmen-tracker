@@ -4,8 +4,8 @@ WORKDIR /app
 
 COPY frontend/package*.json ./
 
-RUN npm ci --only=production && \
-    npm install @vercel/analytics @vercel/web-vitals
+RUN npm install --only=production && \
+    npm install @vercel/analytics web-vitals
 
 COPY frontend/ ./
 
