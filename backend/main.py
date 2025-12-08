@@ -76,11 +76,16 @@ app = FastAPI(title="Salesmen Tracker - Alugandia")
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173").split(","),
+    allow_origins=os.getenv("CORS_ORIGINS", "https://tracker.alugandia.es").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# CORS_ORIGINS = os.getenv(
+#     "CORS_ORIGINS", 
+#     "https://tracker.alugandia.es,salesmen-tracker-frontend-br3otvptg-alugandias-projects.vercel.app"
+# )
 
 # ============================================================================
 # INICIALIZACIÓN CON RETRY AUTOMÁTICO
