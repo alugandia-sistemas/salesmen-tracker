@@ -138,6 +138,18 @@ async def startup_event():
                 conn.execute(text("ALTER TABLE routes ADD COLUMN visit_order INTEGER DEFAULT 0"))
                 conn.commit()
                 print("✅ Migration done (visit_order).")
+            
+            # Check if routes table has postponement columns
+            result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='routes' AND column_name='postpone_reason'"))
+            if not result.fetchone():
+                print("⚠️ Migrating: Adding postponement columns to routes...")
+                conn.execute(text("ALTER TABLE routes ADD COLUMN postpone_reason VARCHAR(50)"))
+                conn.execute(text("ALTER TABLE routes ADD COLUMN original_planned_date TIMESTAMP"))
+                conn.execute(text("ALTER TABLE routes ADD COLUMN postponed_at TIMESTAMP"))
+                conn.execute(text("ALTER TABLE routes ADD COLUMN postpone_notes VARCHAR(255)"))
+                conn.execute(text("ALTER TABLE routes ADD COLUMN times_postponed INTEGER DEFAULT 0"))
+                conn.commit()
+                print("✅ Migration done (postponement columns).")
     except Exception as e:
         print(f"Migration warning: {e}")
 
@@ -201,11 +213,10 @@ class Route(Base):
     planned_date = Column(DateTime, nullable=False)  # Solo fecha (hora se obtiene en check-in)
     status = Column(String(20), default="pending")  # pending, in_progress, completed, cancelled
  
-    # ✅ NUEVOS CAMPOS v2
+    # ✅ NUEVOS CAMPOS v2 - Postponement tracking
     postpone_reason = Column(String(50), nullable=True)
     original_planned_date = Column(DateTime, nullable=True)
     postponed_at = Column(DateTime, nullable=True)
-    postpone_notes = Column(String(255), nullable=True)
     postpone_notes = Column(String(255), nullable=True)
     times_postponed = Column(Integer, default=0)
     
