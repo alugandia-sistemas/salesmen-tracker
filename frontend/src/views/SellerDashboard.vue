@@ -570,11 +570,13 @@ export default {
 
     async fetchAllClients() {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/?limit=1000`)
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/?limit=500`)
         const data = await response.json()
-        this.allClients = data.data || []
+        // Handle both paginated response {data: [...]} and direct array response
+        this.allClients = Array.isArray(data) ? data : (data.data || [])
       } catch (e) {
         console.error('Error fetching all clients:', e)
+        this.allClients = []
       }
     },
 
