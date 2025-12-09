@@ -129,69 +129,73 @@
             <div v-else-if="activeTab === 'clientes'" key="clientes">
               <div class="flex justify-between items-center mb-6">
                 <h2 class="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">Clientes</h2>
-                <div class="flex gap-2">
-                  <button @click="showClienteModal = true"
-                    class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-500 transition text-sm flex items-center gap-2">
-                    <span>+</span> <span class="hidden md:inline">Nuevo Cliente</span>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Stats Overview -->
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                <div
-                  class="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
-                  <span class="block text-2xl font-bold text-slate-900 dark:text-white">{{ clientes.length }}</span>
-                  <span class="text-xs font-bold text-slate-500 uppercase">Total</span>
-                </div>
-                <div
-                  class="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
-                  <span class="block text-2xl font-bold text-slate-900 dark:text-white">{{
-                    contarPorTipo('carpintero_metalico') }}</span>
-                  <span class="text-xs font-bold text-slate-500 uppercase">Carpinteros</span>
-                </div>
-                <div
-                  class="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
-                  <span class="block text-2xl font-bold text-slate-900 dark:text-white">{{ contarPorTipo('cristalero')
-                  }}</span>
-                  <span class="text-xs font-bold text-slate-500 uppercase">Cristaleros</span>
-                </div>
-              </div>
-
-              <!-- Recientes List -->
-              <h3 class="text-sm font-bold text-slate-500 uppercase mb-3 px-1">Añadidos Recientemente</h3>
-              <div v-if="clientes.length > 0" class="space-y-3">
-                <div v-for="cliente in clientesRecientes" :key="cliente.id"
-                  class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition flex items-center justify-between group">
-                  <div class="flex items-center gap-4 min-w-0">
-                    <div
-                      class="w-10 h-10 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0 text-slate-600 dark:text-slate-300 font-bold">
-                      {{ cliente.name.charAt(0).toUpperCase() }}
-                    </div>
-                    <div class="min-w-0">
-                      <h4 class="text-base font-bold text-slate-900 dark:text-white truncate">{{ cliente.name }}</h4>
-                      <p class="text-slate-500 dark:text-slate-400 text-sm truncate flex items-center gap-1">📍 {{
-                        cliente.address }}</p>
-                    </div>
-                  </div>
-                  <button @click="editCliente(cliente)" class="p-2 text-slate-400 hover:text-indigo-600 transition">
-                    ✏️
-                  </button>
-                </div>
-
-                <button @click="$router.push('/admin/clientes')"
-                  class="w-full py-3 mt-4 text-center text-indigo-600 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition border border-indigo-100 dark:border-indigo-900/30">
-                  Ver Directorio Completo →
+                <button @click="showClienteModal = true"
+                  class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-500 transition text-sm flex items-center gap-2">
+                  <span>+</span> <span class="hidden md:inline">Nuevo Cliente</span>
                 </button>
               </div>
 
+              <!-- Search Bar -->
+              <div class="mb-4">
+                <input v-model="clientesSearchQuery" type="text" placeholder="Buscar clientes..."
+                  @input="handleClientesSearch"
+                  class="w-full px-4 py-3 border-2 border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:border-indigo-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                <p class="text-slate-500 text-xs mt-2">{{ clientesMetadata.total }} clientes encontrados</p>
+              </div>
+
+              <!-- Loading -->
+              <div v-if="loadingClientes" class="text-center py-10">
+                <p class="text-slate-500">Cargando clientes...</p>
+              </div>
+
+              <!-- Client List -->
+              <div v-else-if="clientesPaginados.length > 0" class="space-y-3">
+                <div v-for="cliente in clientesPaginados" :key="cliente.id" @click="editCliente(cliente)"
+                  class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition cursor-pointer">
+                  <div class="flex items-start gap-3">
+                    <div
+                      class="w-12 h-12 bg-slate-900 dark:bg-indigo-900 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span class="text-white font-bold text-lg">{{ cliente.name.charAt(0).toUpperCase() }}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <h3 class="font-bold text-slate-900 dark:text-white">{{ cliente.name }}</h3>
+                      <p class="text-sm text-slate-600 dark:text-slate-400 truncate">📍 {{ cliente.address }}</p>
+                      <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">📞 {{ cliente.phone }}</p>
+                    </div>
+                    <span
+                      class="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-full font-semibold">
+                      {{ cliente.client_type }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Pagination -->
+                <div class="flex items-center justify-between mt-6 px-2">
+                  <button @click="previousClientesPage" :disabled="!clientesMetadata.has_prev"
+                    class="px-4 py-2 rounded-lg font-semibold text-sm bg-indigo-600 text-white disabled:bg-slate-400 transition">
+                    ← Anterior
+                  </button>
+                  <div class="text-center text-sm">
+                    <p class="font-semibold text-slate-900 dark:text-white">Página {{ clientesMetadata.page }} de {{
+                      clientesMetadata.total_pages }}</p>
+                    <p class="text-slate-600 dark:text-slate-400 text-xs mt-1">Mostrando {{ clientesPaginados.length }}
+                      de {{ clientesMetadata.total }}</p>
+                  </div>
+                  <button @click="nextClientesPage" :disabled="!clientesMetadata.has_next"
+                    class="px-4 py-2 rounded-lg font-semibold text-sm bg-indigo-600 text-white disabled:bg-slate-400 transition">
+                    Siguiente →
+                  </button>
+                </div>
+              </div>
+
+              <!-- No results -->
               <div v-else
                 class="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
-                <p class="text-slate-500 mb-2">No tienes clientes aún.</p>
-                <button @click="showClienteModal = true" class="text-indigo-600 font-bold">Añadir Cliente</button>
+                <p class="text-slate-500 mb-2">{{ clientesSearchQuery ? 'No se encontraron clientes' : 'No tienes clientes' }}</p>
+                <button v-if="!clientesSearchQuery" @click="showClienteModal = true"
+                  class="text-indigo-600 font-bold">Añadir Cliente</button>
               </div>
             </div>
-
             <!-- RUTAS TAB -->
             <div v-else-if="activeTab === 'rutas'" key="rutas">
               <div class="flex justify-between items-center mb-6">
@@ -202,39 +206,43 @@
                 </button>
               </div>
 
-              <div v-if="Object.keys(groupedRoutes).length > 0" class="space-y-6">
-                <!-- Loop through each seller -->
-                <div v-for="(dateGroups, sellerId) in groupedRoutes" :key="sellerId"
+              <div v-if="Object.keys(groupedRoutesByDate).length > 0" class="space-y-6">
+                <!-- Loop through each date -->
+                <div v-for="(sellerGroups, date) in groupedRoutesByDate" :key="date"
                   class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
 
-                  <!-- Seller Header -->
-                  <div
-                    class="bg-indigo-50 dark:bg-indigo-900/20 px-4 py-3 border-b border-indigo-100 dark:border-indigo-900/30">
-                    <div>
-                      <h3 class="text-lg font-bold text-indigo-900 dark:text-indigo-100">
-                        {{ getNombreVendedor(sellerId) }}
+                  <!-- Date Header -->
+                  <div class="bg-slate-100 dark:bg-slate-700 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
+                    <div class="flex items-center justify-between">
+                      <h3 class="text-lg font-bold text-slate-900 dark:text-white">
+                        📅 {{ formatDateHeader(date) }}
                       </h3>
-                      <p class="text-xs text-indigo-700 dark:text-indigo-300">
-                        {{ Object.values(dateGroups).flat().length }} visitas programadas
-                      </p>
+                      <span class="text-sm font-bold text-slate-600 dark:text-slate-400">
+                        {{ getTotalVisitsForDate(sellerGroups) }} {{ getTotalVisitsForDate(sellerGroups) === 1 ?
+                          'visita' : 'visitas' }}
+                      </span>
                     </div>
                   </div>
 
-                  <!-- Loop through each date within seller -->
+                  <!-- Loop through each seller within date -->
                   <div class="divide-y divide-slate-100 dark:divide-slate-700">
-                    <div v-for="(routes, date) in dateGroups" :key="date" class="p-4">
-                      <!-- Date Header -->
-                      <div class="flex items-center gap-2 mb-3">
-                        <h4 class="text-sm font-bold text-slate-700 dark:text-slate-300">
-                          {{ formatDateHeader(date) }}
-                        </h4>
-                        <span
-                          class="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full font-bold">
-                          {{ routes.length }} {{ routes.length === 1 ? 'visita' : 'visitas' }}
-                        </span>
+                    <div v-for="(routes, sellerId) in sellerGroups" :key="sellerId" class="p-4">
+                      <!-- Seller Subheader -->
+                      <div class="flex items-center gap-3 mb-3">
+                        <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span class="text-white font-bold text-sm">{{ getNombreVendedor(sellerId).charAt(0) }}</span>
+                        </div>
+                        <div class="flex-1">
+                          <h4 class="text-sm font-bold text-slate-900 dark:text-white">
+                            {{ getNombreVendedor(sellerId) }}
+                          </h4>
+                          <p class="text-xs text-slate-500 dark:text-slate-400">
+                            {{ routes.length }} {{ routes.length === 1 ? 'visita' : 'visitas' }}
+                          </p>
+                        </div>
                       </div>
 
-                      <!-- List of visits for this date -->
+                      <!-- List of visits for this seller -->
                       <div class="space-y-2">
                         <div v-for="ruta in routes" :key="ruta.id"
                           class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700 transition">
@@ -261,10 +269,10 @@
 
                             <!-- Status Badge -->
                             <span class="px-2 py-0.5 rounded text-xs font-bold uppercase shrink-0" :class="{
-                              'bg-slate-100 text-slate-600': ruta.status === 'pending',
-                              'bg-emerald-100 text-emerald-700': ruta.status === 'completed',
-                              'bg-indigo-100 text-indigo-700': ruta.status === 'in_progress',
-                              'bg-rose-100 text-rose-700': ruta.status === 'cancelled'
+                              'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300': ruta.status === 'pending',
+                              'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300': ruta.status === 'completed',
+                              'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300': ruta.status === 'in_progress',
+                              'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300': ruta.status === 'cancelled'
                             }">
                               {{ ruta.status }}
                             </span>
@@ -580,6 +588,20 @@ export default {
       clientes: [],
       rutas: [],
 
+      // Clientes pagination
+      clientesPaginados: [],
+      loadingClientes: false,
+      clientesSearchQuery: '',
+      clientesSearchTimeout: null,
+      clientesMetadata: {
+        page: 1,
+        limit: 25,
+        total: 0,
+        total_pages: 0,
+        has_next: false,
+        has_prev: false
+      },
+
       showVendedorModal: false,
       showClienteModal: false,
       showRutaModal: false,
@@ -614,39 +636,41 @@ export default {
     }
   },
   computed: {
-    clientesRecientes() {
-      // Mostrar solo los 5 más recientes
-      return this.clientes.slice(0, 5)
-    },
-    groupedRoutes() {
-      // Group routes by seller, then by date
+    groupedRoutesByDate() {
+      // Group routes by date first, then by seller
       const grouped = {}
 
       this.rutas.forEach(ruta => {
-        const sellerId = ruta.seller_id
         const date = new Date(ruta.planned_date).toISOString().split('T')[0] // YYYY-MM-DD
+        const sellerId = ruta.seller_id
 
-        if (!grouped[sellerId]) {
-          grouped[sellerId] = {}
+        if (!grouped[date]) {
+          grouped[date] = {}
         }
 
-        if (!grouped[sellerId][date]) {
-          grouped[sellerId][date] = []
+        if (!grouped[date][sellerId]) {
+          grouped[date][sellerId] = []
         }
 
-        grouped[sellerId][date].push(ruta)
+        grouped[date][sellerId].push(ruta)
       })
 
-      // Sort routes within each date by time
-      Object.keys(grouped).forEach(sellerId => {
-        Object.keys(grouped[sellerId]).forEach(date => {
-          grouped[sellerId][date].sort((a, b) =>
+      // Sort routes within each seller by time
+      Object.keys(grouped).forEach(date => {
+        Object.keys(grouped[date]).forEach(sellerId => {
+          grouped[date][sellerId].sort((a, b) =>
             new Date(a.planned_date) - new Date(b.planned_date)
           )
         })
       })
 
-      return grouped
+      // Sort dates chronologically
+      const sortedGrouped = {}
+      Object.keys(grouped).sort((a, b) => new Date(a) - new Date(b)).forEach(date => {
+        sortedGrouped[date] = grouped[date]
+      })
+
+      return sortedGrouped
     }
   },
   mounted() {
@@ -672,12 +696,62 @@ export default {
         console.error('Error fetching vendedores:', e)
       }
     },
-    async fetchClientes() {
+    async fetchClientes(page = 1) {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/`)
-        this.clientes = await response.json()
+        this.loadingClientes = true
+        const params = new URLSearchParams({
+          page: page,
+          limit: this.clientesMetadata.limit,
+          ...(this.clientesSearchQuery && { search: this.clientesSearchQuery })
+        })
+
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/?${params.toString()}`)
+        const data = await response.json()
+
+        // Support both paginated response { data: [...], pagination: {...} }
+        // and simple array response [ ... ] (older backend)
+        if (Array.isArray(data)) {
+          this.clientesPaginados = data
+          this.clientes = data
+          this.clientesMetadata = {
+            page: 1,
+            limit: data.length,
+            total: data.length,
+            total_pages: 1,
+            has_next: false,
+            has_prev: false
+          }
+        } else {
+          this.clientesPaginados = data.data || []
+          this.clientesMetadata = data.pagination || {}
+          // Also update clientes array for backwards compatibility
+          this.clientes = data.data || []
+        }
       } catch (e) {
         console.error('Error fetching clientes:', e)
+        this.clientesPaginados = []
+      } finally {
+        this.loadingClientes = false
+      }
+    },
+    handleClientesSearch() {
+      if (this.clientesSearchTimeout) {
+        clearTimeout(this.clientesSearchTimeout)
+      }
+      this.clientesSearchTimeout = setTimeout(() => {
+        this.fetchClientes(1)
+      }, 500)
+    },
+    nextClientesPage() {
+      if (this.clientesMetadata.has_next) {
+        this.fetchClientes(this.clientesMetadata.page + 1)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    },
+    previousClientesPage() {
+      if (this.clientesMetadata.has_prev) {
+        this.fetchClientes(this.clientesMetadata.page - 1)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
       }
     },
     async fetchRutas() {
@@ -690,17 +764,14 @@ export default {
     },
 
     // Contar clientes por tipo
-    contarPorTipo() {
-      if (!Array.isArray(this.clientes)) {
-        console.warn('clientes no es un array:', this.clientes)
-        return { cerrajeros: 0, carpinteros: 0, otros: 0 }
+    contarPorTipo(tipo) {
+      if (!Array.isArray(this.clientesPaginados)) {
+        return 0
       }
-
-      return {
-        cerrajeros: this.clientes.filter(c => c.client_type === 'cerrajero').length,
-        carpinteros: this.clientes.filter(c => c.client_type === 'carpintero').length,
-        otros: this.clientes.filter(c => !['cerrajero', 'carpintero'].includes(c.client_type)).length
-      }
+      return this.clientesPaginados.filter(c => c.client_type === tipo).length
+    },
+    getTotalVisitsForDate(sellerGroups) {
+      return Object.values(sellerGroups).reduce((total, routes) => total + routes.length, 0)
     },
 
     // TRACKING
@@ -782,15 +853,23 @@ export default {
           : `${import.meta.env.VITE_API_URL}/clients/`
         const method = this.editingCliente ? 'PUT' : 'POST'
 
-        await fetch(url, {
+        const response = await fetch(url, {
           method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.formCliente)
         })
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => null)
+          alert(`Error guardando cliente: ${err?.detail || err?.message || 'Error desconocido'}`)
+          return
+        }
+
         this.fetchClientes()
         this.closeClienteModal()
       } catch (e) {
         console.error('Error saving cliente:', e)
+        alert(`Error guardando cliente: ${e.message}`)
       }
     },
     async deleteCliente(id) {

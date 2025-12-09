@@ -1,10 +1,11 @@
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query, Body, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, Enum, create_engine, text, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship, sessionmaker, joinedload
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from geoalchemy2 import Geometry, Geography
+from geoalchemy2.elements import WKTElement
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from typing import Optional, List
@@ -1056,7 +1057,7 @@ def create_client(
             email=request.email,
             client_type=request.client_type,
             status=request.status,
-            location=func.ST_GeomFromText(location_wkt, 4326)
+            location=WKTElement(location_wkt, srid=4326)
         )
         
         db.add(client)
@@ -1121,7 +1122,7 @@ def update_client(
     # Actualizar ubicación si se proporciona
     if request.latitude is not None and request.longitude is not None:
         location_wkt = f"POINT({request.longitude} {request.latitude})"
-        client.location = func.ST_GeomFromText(location_wkt, 4326)
+        client.location = WKTElement(location_wkt, srid=4326)
     
     db.commit()
     db.refresh(client)
@@ -2444,7 +2445,8 @@ def get_seller_summary(
 
 @app.post("/visits/checkin/", response_model=CheckInResponse)
 async def checkin(
-    request: CheckInRequest,
+    request: Optional[CheckInRequest] = Body(None),
+    request_form: Optional[str] = Form(None),
     photo: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db)
 ):
@@ -2462,6 +2464,17 @@ async def checkin(
     from sqlalchemy import func
     
     try:
+        # Support both application/json body (`request`) and multipart form field (`request_form`)
+        import json
+        if request is None:
+            if not request_form:
+                raise HTTPException(status_code=400, detail="Request body required")
+            try:
+                payload = json.loads(request_form)
+                request = CheckInRequest.model_validate(payload)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid request payload: {str(e)}")
+
         # Validar que IDs sean UUIDs válidos
         try:
             route_id = uuid.UUID(request.route_id)
