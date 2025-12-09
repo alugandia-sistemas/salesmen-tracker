@@ -76,7 +76,7 @@ app = FastAPI(title="Salesmen Tracker - Alugandia")
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "https://tracker.alugandia.com").split(","),
+    allow_origins=list(set(os.getenv("CORS_ORIGINS", "").split(",") + ["https://tracker.alugandia.com"])) if os.getenv("CORS_ORIGINS") else ["https://tracker.alugandia.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
