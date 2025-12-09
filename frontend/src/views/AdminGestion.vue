@@ -690,8 +690,17 @@ export default {
     },
 
     // Contar clientes por tipo
-    contarPorTipo(tipo) {
-      return this.clientes.filter(c => c.client_type === tipo).length
+    contarPorTipo() {
+      if (!Array.isArray(this.clientes)) {
+        console.warn('clientes no es un array:', this.clientes)
+        return { cerrajeros: 0, carpinteros: 0, otros: 0 }
+      }
+
+      return {
+        cerrajeros: this.clientes.filter(c => c.client_type === 'cerrajero').length,
+        carpinteros: this.clientes.filter(c => c.client_type === 'carpintero').length,
+        otros: this.clientes.filter(c => !['cerrajero', 'carpintero'].includes(c.client_type)).length
+      }
     },
 
     // TRACKING

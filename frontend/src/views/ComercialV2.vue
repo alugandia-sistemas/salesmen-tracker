@@ -1,15 +1,58 @@
 <template>
    <div class="min-h-screen bg-white">
+      <!-- Sidebar Overlay -->
+      <div v-if="sidebarOpen" @click="sidebarOpen = false" class="fixed inset-0 bg-black/40 z-40 md:hidden"></div>
+
+      <!-- Sidebar -->
+      <div
+         :class="['fixed top-0 left-0 h-full w-64 bg-white shadow-2xl z-50 transform transition-transform duration-300 md:hidden', sidebarOpen ? 'translate-x-0' : '-translate-x-full']">
+         <div class="p-6">
+            <div class="flex justify-between items-center mb-8">
+               <h2 class="text-xl font-bold text-gray-900">Menú</h2>
+               <button @click="sidebarOpen = false" class="text-gray-600 hover:text-gray-900">
+                  <span class="text-2xl">×</span>
+               </button>
+            </div>
+            <nav class="space-y-4">
+               <a href="#rutas" @click="sidebarOpen = false"
+                  class="block px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-900 font-semibold">
+                  📍 Rutas de hoy
+               </a>
+               <a href="#historico" @click="sidebarOpen = false"
+                  class="block px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-900 font-semibold">
+                  📊 Histórico
+               </a>
+               <a href="#clientes" @click="sidebarOpen = false"
+                  class="block px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-900 font-semibold">
+                  👥 Clientes
+               </a>
+               <a href="#visitas" @click="sidebarOpen = false"
+                  class="block px-4 py-3 rounded-lg hover:bg-gray-100 text-gray-900 font-semibold">
+                  📝 Historial de visitas
+               </a>
+            </nav>
+         </div>
+      </div>
+
       <!-- Header -->
-      <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <nav class="bg-white border-b border-gray-200 sticky top-0 z-30">
          <div class="px-4 py-4">
             <div class="flex justify-between items-center">
-               <h1 class="text-2xl font-bold text-gray-900">Alugandia</h1>
+               <div class="flex items-center gap-3">
+                  <button @click="sidebarOpen = !sidebarOpen"
+                     class="md:hidden text-gray-900 p-2 hover:bg-gray-100 rounded-lg">
+                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                           d="M4 6h16M4 12h16M4 18h16"></path>
+                     </svg>
+                  </button>
+                  <h1 class="text-2xl font-bold text-gray-900">Alugandia</h1>
+               </div>
                <button @click="logout" class="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-semibold">
                   Salir
                </button>
             </div>
-            <p class="text-gray-600 text-sm mt-2">App de Vendedor</p>
+            <p class="text-gray-600 text-sm mt-2 ml-11 md:ml-0">App de Vendedor</p>
          </div>
       </nav>
 
@@ -19,7 +62,7 @@
          <h2 class="text-3xl font-bold text-gray-900 mb-6">¡Hola, {{ sellerName }}!</h2>
 
          <!-- Rutas para hoy -->
-         <div class="mb-8">
+         <div id="rutas" class="mb-8">
             <h3 class="text-xl font-bold text-gray-900 mb-4">Rutas de hoy</h3>
 
             <div v-if="routesHoy.length > 0" class="space-y-3">
@@ -60,8 +103,46 @@
             </div>
          </div>
 
+         <!-- Histórico de Rutas -->
+         <div id="historico" class="mb-8">
+            <h3 class="text-xl font-bold text-gray-900 mb-4">📊 Histórico de Rutas</h3>
+
+            <div v-if="loadingStats" class="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center">
+               <p class="text-gray-600 text-sm">⏳ Cargando estadísticas...</p>
+            </div>
+
+            <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <!-- Total Visits -->
+               <div class="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-6">
+                  <div class="flex items-center justify-between mb-2">
+                     <h4 class="text-sm font-semibold text-blue-900">Total de Visitas</h4>
+                     <span class="text-2xl">📍</span>
+                  </div>
+                  <p class="text-4xl font-bold text-blue-900 mb-1">{{ historicStats.total_visits }}</p>
+                  <p class="text-xs text-blue-700">Todas las visitas realizadas</p>
+               </div>
+
+               <!-- Completed Visits -->
+               <div class="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 rounded-xl p-6">
+                  <div class="flex items-center justify-between mb-2">
+                     <h4 class="text-sm font-semibold text-green-900">Visitas Completadas</h4>
+                     <span class="text-2xl">✅</span>
+                  </div>
+                  <p class="text-4xl font-bold text-green-900 mb-1">{{ historicStats.completed_visits }}</p>
+                  <div class="flex items-center gap-2">
+                     <div class="flex-1 bg-green-200 rounded-full h-2">
+                        <div class="bg-green-600 h-2 rounded-full"
+                           :style="{ width: historicStats.visits_completion_percentage + '%' }"></div>
+                     </div>
+                     <span class="text-xs font-bold text-green-700">{{ historicStats.visits_completion_percentage
+                        }}%</span>
+                  </div>
+               </div>
+            </div>
+         </div>
+
          <!-- 🔍 BÚSQUEDA + PAGINACIÓN DE CLIENTES -->
-         <div class="mb-8">
+         <div id="clientes" class="mb-8">
             <h3 class="text-xl font-bold text-gray-900 mb-4">Buscar Clientes</h3>
 
             <!-- Input de búsqueda -->
@@ -91,7 +172,7 @@
                         <div class="flex gap-4 mt-2">
                            <span class="text-gray-700 text-xs font-mono">📞 {{ cliente.phone }}</span>
                            <span v-if="cliente.email" class="text-gray-700 text-xs truncate">📧 {{ cliente.email
-                              }}</span>
+                           }}</span>
                         </div>
                      </div>
                      <span
@@ -142,7 +223,7 @@
          </div>
 
          <!-- Historial de visitas -->
-         <div>
+         <div id="visitas">
             <h3 class="text-xl font-bold text-gray-900 mb-4">Historial de visitas</h3>
 
             <div v-if="visitasRecientes.length > 0" class="space-y-3">
@@ -269,6 +350,20 @@ export default {
             has_prev: false
          },
 
+         // 📊 HISTÓRICO DE RUTAS
+         historicStats: {
+            total_routes: 0,
+            completed_routes: 0,
+            routes_completion_percentage: 0,
+            total_visits: 0,
+            completed_visits: 0,
+            visits_completion_percentage: 0
+         },
+         loadingStats: false,
+
+         // 📱 SIDEBAR
+         sidebarOpen: false,
+
          // CHECK-IN
          showCheckinModal: false,
          showResultado: false,
@@ -296,6 +391,7 @@ export default {
       this.fetchRutasHoy()
       this.fetchVisitas()
       this.fetchClientes(1)  // Cargar primera página
+      this.fetchHistoricStats()  // Cargar estadísticas históricas
       this.iniciarGPS()
    },
    beforeUnmount() {
@@ -318,6 +414,22 @@ export default {
          this.searchTimeout = setTimeout(() => {
             this.fetchClientes(1)  // Volver a página 1 cuando busca
          }, 500)
+      },
+
+      // 📊 CARGAR ESTADÍSTICAS HISTÓRICAS
+      async fetchHistoricStats() {
+         try {
+            this.loadingStats = true
+            const response = await fetch(
+               `${import.meta.env.VITE_API_URL}/routes/stats/?seller_id=${this.seller.id}`
+            )
+            const data = await response.json()
+            this.historicStats = data
+         } catch (e) {
+            console.error('Error fetching historic stats:', e)
+         } finally {
+            this.loadingStats = false
+         }
       },
 
       // 📄 CARGAR CLIENTES CON PAGINACIÓN

@@ -1494,6 +1494,56 @@ def delete_route(route_id: str, db: Session = Depends(get_db)):
     return {"id": str(route.id), "message": "Ruta eliminada"}
 
 
+@app.get("/routes/stats/")
+def get_routes_stats(
+    seller_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get historic routes statistics for a seller"""
+    from sqlalchemy import func
+    
+    try:
+        seller_uuid = uuid.UUID(seller_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"seller_id inválido: {seller_id}")
+    
+    # Count total routes for this seller
+    total_routes = db.query(func.count(Route.id)).filter(
+        Route.seller_id == seller_uuid
+    ).scalar() or 0
+    
+    # Count completed routes
+    completed_routes = db.query(func.count(Route.id)).filter(
+        Route.seller_id == seller_uuid,
+        Route.status == 'completed'
+    ).scalar() or 0
+    
+    # Count total visits for this seller
+    total_visits = db.query(func.count(Visit.id)).filter(
+        Visit.seller_id == seller_uuid
+    ).scalar() or 0
+    
+    # Count completed visits (valid check-ins)
+    completed_visits = db.query(func.count(Visit.id)).filter(
+        Visit.seller_id == seller_uuid,
+        Visit.checkin_is_valid == True
+    ).scalar() or 0
+    
+    # Calculate percentages
+    routes_completion_percentage = round((completed_routes / total_routes * 100), 1) if total_routes > 0 else 0
+    visits_completion_percentage = round((completed_visits / total_visits * 100), 1) if total_visits > 0 else 0
+    
+    return {
+        "total_routes": total_routes,
+        "completed_routes": completed_routes,
+        "routes_completion_percentage": routes_completion_percentage,
+        "total_visits": total_visits,
+        "completed_visits": completed_visits,
+        "visits_completion_percentage": visits_completion_percentage
+    }
+
+
+
 # --- INVITACIONES ---
 # Agregar DESPUÉS del endpoint DELETE de routes (alrededor de línea 1050)
 
