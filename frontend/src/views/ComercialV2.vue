@@ -1,863 +1,512 @@
 <template>
-   <div class="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden relative">
-
+   <div class="min-h-screen bg-white">
       <!-- Header -->
-      <header class="bg-white dark:bg-slate-900 z-[50] shadow-sm shrink-0">
-         <div class="px-4 py-4 flex justify-between items-center">
-            <!-- Sidebar Toggle -->
-            <button @click="toggleSidebar" class="md:hidden text-slate-700 dark:text-slate-200">
-               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                  stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16">
-                  </path>
-               </svg>
-            </button>
+      <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+         <div class="px-4 py-4">
+            <div class="flex justify-between items-center">
+               <h1 class="text-2xl font-bold text-gray-900">Alugandia</h1>
+               <button @click="logout" class="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                  Salir
+               </button>
+            </div>
+            <p class="text-gray-600 text-sm mt-2">App de Vendedor</p>
+         </div>
+      </nav>
 
-            <div>
-               <h1
-                  class="text-xl font-bold bg-gradient-to-r from-indigo-600 to-indigo-400 bg-clip-text text-transparent">
-                  Alugandia Tracker
-               </h1>
-               <div class="flex items-center gap-2 mt-1">
-                  <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  <p class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{{ sellerName
-                     }}</p>
+      <!-- Content -->
+      <div class="px-4 py-6 pb-20">
+         <!-- Greeting -->
+         <h2 class="text-3xl font-bold text-gray-900 mb-6">¡Hola, {{ sellerName }}!</h2>
+
+         <!-- Rutas para hoy -->
+         <div class="mb-8">
+            <h3 class="text-xl font-bold text-gray-900 mb-4">Rutas de hoy</h3>
+
+            <div v-if="routesHoy.length > 0" class="space-y-3">
+               <div v-for="ruta in routesHoy" :key="ruta.id" class="bg-gray-50 border-2 border-gray-200 rounded-xl p-5">
+                  <div class="flex items-start gap-3 mb-4">
+                     <div class="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span class="text-white font-bold">{{ getNombreCliente(ruta.client_id).charAt(0) }}</span>
+                     </div>
+                     <div class="flex-1">
+                        <h4 class="text-lg font-bold text-gray-900">{{ getNombreCliente(ruta.client_id) }}</h4>
+                        <p class="text-gray-600 text-sm">📍 {{ getClienteDireccion(ruta.client_id) }}</p>
+                     </div>
+                  </div>
+
+                  <div class="flex gap-2 mb-4">
+                     <span class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-900">
+                        📅 {{ formatDate(ruta.planned_date) }}
+                     </span>
+                     <span class="px-3 py-1 rounded-full text-xs font-semibold"
+                        :class="ruta.status === 'pending' ? 'bg-orange-200 text-orange-900' : 'bg-green-200 text-green-900'">
+                        {{ ruta.status === 'pending' ? '⏳ Pendiente' : '✅ Completada' }}
+                     </span>
+                  </div>
+
+                  <button v-if="ruta.status === 'pending'" @click="iniciarCheckin(ruta)"
+                     class="w-full bg-gray-900 text-white py-4 rounded-lg font-semibold text-lg hover:bg-gray-800 transition">
+                     📍 Iniciar Check-in
+                  </button>
+                  <button v-else @click="verVisita(ruta.id)"
+                     class="w-full bg-gray-100 text-gray-900 py-4 rounded-lg font-semibold text-lg hover:bg-gray-200 transition">
+                     Ver detalles
+                  </button>
                </div>
             </div>
 
-            <div class="flex gap-2">
-               <button @click="logout"
-                  class="h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center">
-                  <span class="text-xl">🚪</span>
-               </button>
+            <div v-else class="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center">
+               <p class="text-gray-600 text-sm">Sin rutas para hoy</p>
             </div>
          </div>
-      </header>
 
-      <div class="flex-1 flex relative overflow-hidden">
+         <!-- 🔍 BÚSQUEDA + PAGINACIÓN DE CLIENTES -->
+         <div class="mb-8">
+            <h3 class="text-xl font-bold text-gray-900 mb-4">Buscar Clientes</h3>
 
-         <!-- Mobile Sidebar Backdrop -->
-         <div v-if="showSidebar" @click="showSidebar = false"
-            class="absolute inset-0 bg-black/50 z-20 md:hidden backdrop-blur-sm transition-opacity"></div>
-
-         <!-- Sidebar -->
-         <aside
-            class="absolute md:relative inset-y-0 left-0 w-3/4 md:w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col shadow-2xl z-30 transition-transform duration-300 transform"
-            :class="showSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'">
-            <div class="p-4 space-y-2 flex-1">
-               <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id; showSidebar = false" :class="[
-                  'w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm',
-                  activeTab === tab.id
-                     ? 'bg-indigo-600 text-white shadow-md'
-                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-               ]">
-                  <span class="text-xl">{{ tab.icon }}</span>
-                  <span>{{ tab.label }}</span>
-               </button>
+            <!-- Input de búsqueda -->
+            <div class="mb-4">
+               <input v-model="searchQuery" type="text" placeholder="Busca por nombre, teléfono o email..."
+                  class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900"
+                  @input="handleSearch" />
+               <p class="text-gray-500 text-xs mt-2">
+                  {{ clientesMetadata.total }} clientes encontrados
+               </p>
             </div>
 
-            <div class="p-4 border-t border-slate-200 dark:border-slate-700">
-               <button @click="logout"
-                  class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20">
-                  <span class="text-xl">🚪</span>
-                  <span>Cerrar Sesión</span>
-               </button>
+            <!-- Estado de carga -->
+            <div v-if="cargandoClientes" class="text-center py-8">
+               <p class="text-gray-600">⏳ Buscando clientes...</p>
             </div>
-         </aside>
 
-         <!-- Main Content -->
-         <main class="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900 w-full relative">
-            <div class="max-w-lg mx-auto p-4 md:p-6 pb-24">
-
-               <!-- TAB: HOY (Rutas Activas) -->
-               <transition name="fade" mode="out-in">
-                  <div v-if="activeTab === 'hoy'" key="hoy">
-                     <div class="flex justify-between items-center mb-6">
-                        <div>
-                           <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Rutas de Hoy</h2>
-                           <p class="text-xs text-slate-500 dark:text-slate-400">{{ routesHoy.length }} paradas
-                              programadas</p>
-                        </div>
-
-                        <button @click="abrirModalParada"
-                           class="bg-indigo-600 text-white px-3 py-2 rounded-lg font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center gap-1">
-                           <span>+</span> Parada
-                        </button>
-                     </div>
-
-                     <!-- Search Bar -->
-                     <div class="mb-4">
-                        <input v-model="routeSearchQuery" type="text" placeholder="🔍 Buscar por cliente..."
-                           class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold text-slate-900 dark:text-white shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-                     </div>
-
-                     <!-- Daily Summary Stats -->
-                     <div class="grid grid-cols-3 gap-3 mb-4">
-                        <div class="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl text-center">
-                           <span class="block text-2xl font-black text-indigo-600 dark:text-indigo-400">{{
-                              todayStats.total }}</span>
-                           <span class="text-xs font-bold text-indigo-800 dark:text-indigo-200 uppercase">Total</span>
-                        </div>
-                        <div class="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl text-center">
-                           <span class="block text-2xl font-black text-emerald-600 dark:text-emerald-400">{{
-                              todayStats.completed }}</span>
-                           <span
-                              class="text-xs font-bold text-emerald-800 dark:text-emerald-200 uppercase">Completadas</span>
-                        </div>
-                        <div class="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-center">
-                           <span class="block text-2xl font-black text-slate-900 dark:text-white">{{
-                              todayStats.percentage }}%</span>
-                           <span class="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Progreso</span>
-                        </div>
-                     </div>
-
-                     <!-- Progress Bar -->
-                     <div class="mb-6">
-                        <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                           <div class="bg-emerald-500 h-full transition-all duration-500"
-                              :style="{ width: todayStats.percentage + '%' }"></div>
-                        </div>
-                     </div>
-
-                     <div v-if="routesHoy.length > 0" class="space-y-4">
-                        <div v-for="(ruta, index) in routesHoy" :key="ruta.id"
-                           class="card-driver relative overflow-hidden group">
-                           <!-- Status Line -->
-                           <div class="absolute left-0 top-0 bottom-0 w-1.5" :class="{
-                              'bg-slate-300': ruta.status === 'pending',
-                              'bg-emerald-500': ruta.status === 'completed',
-                              'bg-indigo-500': ruta.status === 'in_progress',
-                              'bg-rose-500': ruta.status === 'cancelled'
-                           }"></div>
-
-                           <div class="pl-3 pr-2">
-                              <!-- Header: Time, Status & Reorder -->
-                              <div class="flex justify-between items-start mb-3">
-                                 <div class="flex items-center gap-2">
-                                    <span
-                                       class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-xs font-bold font-mono">
-                                       #{{ index + 1 }}
-                                    </span>
-                                    <span
-                                       class="text-slate-500 dark:text-slate-400 font-mono text-sm font-bold flex items-center gap-1">
-                                       {{ formatTime(ruta.planned_date) }}
-                                    </span>
-                                 </div>
-
-                                 <!-- Reorder Controls -->
-                                 <div v-if="ruta.status === 'pending'" class="flex flex-col gap-1">
-                                    <button v-if="index > 0" @click.stop="moveRoute(index, -1)"
-                                       class="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded">
-                                       ▲
-                                    </button>
-                                    <button v-if="index < routesHoy.length - 1" @click.stop="moveRoute(index, 1)"
-                                       class="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded">
-                                       ▼
-                                    </button>
-                                 </div>
-                              </div>
-
-                              <div class="flex justify-between items-start">
-                                 <div>
-                                    <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-1 leading-tight">
-                                       {{ ruta.client?.name }}
-                                    </h3>
-                                    <p class="text-slate-600 dark:text-slate-400 text-sm mb-4 flex items-start gap-1">
-                                       📍 {{ ruta.client?.address }}
-                                    </p>
-                                 </div>
-                                 <span class="badge-driver mt-1 shrink-0" :class="getStatusBadgeClass(ruta.status)">
-                                    {{ getStatusLabel(ruta.status) }}
-                                 </span>
-                              </div>
-
-                              <!-- Actions Area -->
-                              <div class="grid grid-cols-2 gap-3 mt-2">
-                                 <template v-if="ruta.status === 'pending'">
-                                    <button @click="iniciarCheckin(ruta)" class="btn-driver-primary col-span-2">
-                                       📍 CHECK-IN
-                                    </button>
-                                    <button @click="mostrarAplazar(ruta)" class="btn-driver-secondary text-sm h-12">
-                                       ⏰ Aplazar
-                                    </button>
-                                    <a :href="'tel:' + ruta.client?.phone" class="btn-driver-secondary text-sm h-12">
-                                       📞 Llamar
-                                    </a>
-                                 </template>
-
-                                 <button v-else-if="ruta.status === 'completed'" @click="verDetalleVisita(ruta)"
-                                    class="btn-driver-secondary col-span-2 text-sm">
-                                    Ver Detalles
-                                 </button>
-                              </div>
-                           </div>
-                        </div>
-                     </div>
-
-                     <div v-else class="text-center py-12 px-4">
-                        <div
-                           class="bg-indigo-50 dark:bg-slate-800 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-                           <span class="text-4xl">📅</span>
-                        </div>
-                        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-2">Todo listo por hoy</h3>
-                        <p class="text-slate-500 dark:text-slate-400 max-w-xs mx-auto mb-6">No tienes más rutas
-                           programadas.</p>
-                        <button @click="abrirModalParada" class="text-indigo-600 font-bold underline">Añadir una parada
-                           extra</button>
-                     </div>
-                  </div>
-
-                  <!-- TAB: HISTORIAL -->
-                  <div v-else-if="activeTab === 'historial'" key="historial"
-                     class="flex flex-col items-center justify-center py-20 text-center">
-                     <div
-                        class="w-24 h-24 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 text-4xl">
-                        🚧
-                     </div>
-                     <h2 class="text-xl font-bold text-slate-900 dark:text-white mb-2">Próximamente</h2>
-                     <p class="text-slate-500 max-w-xs">El historial detallado estará disponible en la próxima
-                        actualización.</p>
-                  </div>
-
-                  <!-- TAB: CLIENTES (Global Directory) -->
-                  <div v-else-if="activeTab === 'clientes'" key="clientes" class="pb-24">
-                     <div class="mb-6 sticky top-0 bg-slate-50 dark:bg-slate-900 pt-4 pb-2 z-40">
-                        <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4 px-4">Directorio de Clientes
-                        </h2>
-                        <div class="px-4">
-                           <input v-model="searchQuery" type="text" placeholder="🔍 Buscar cliente..."
-                              class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold text-slate-900 dark:text-white shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-                        </div>
-
-                        <!-- Quick Group Nav -->
-                        <div v-if="!searchQuery" class="mt-4 px-4 overflow-x-auto no-scrollbar">
-                           <div class="flex gap-2 min-w-max">
-                              <button v-for="grupo in gruposAlfabeticos" :key="grupo.id"
-                                 @click="scrollToGroup(grupo.id)" :class="[
-                                    'px-3 py-2 rounded-lg text-sm font-bold transition whitespace-nowrap border',
-                                    grupoActivo === grupo.id
-                                       ? 'bg-indigo-600 text-white border-indigo-600'
-                                       : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                                 ]">
-                                 {{ grupo.label }}
-                                 <span class="ml-1 text-xs opacity-70">({{ contarClientesEnGrupo(grupo.letras)
-                                    }})</span>
-                              </button>
-                           </div>
-                        </div>
-                     </div>
-
-                     <div v-if="filteredClients.length > 0">
-                        <!-- Grouped View -->
-                        <div v-if="!searchQuery">
-                           <div v-for="grupo in gruposAlfabeticos" :key="grupo.id" :id="'grupo-' + grupo.id"
-                              class="mb-6">
-                              <!-- Group Header (Only if has clients) -->
-                              <div v-if="clientesEnGrupo(grupo.letras).length > 0"
-                                 class="px-4 mb-2 sticky top-36 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm z-30 py-2">
-                                 <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                    {{ grupo.label }}
-                                    <span
-                                       class="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs px-2 py-0.5 rounded-full">
-                                       {{ clientesEnGrupo(grupo.letras).length }}
-                                    </span>
-                                 </h3>
-                              </div>
-
-                              <div class="space-y-3 px-4">
-                                 <div v-for="client in clientesEnGrupo(grupo.letras)" :key="client.id"
-                                    class="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
-                                    <div class="flex justify-between items-start mb-2">
-                                       <h3 class="font-bold text-slate-900 dark:text-white text-lg">{{ client.name }}
-                                       </h3>
-                                       <span
-                                          class="text-xs font-bold px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                          {{ client.client_type || 'Cliente' }}
-                                       </span>
-                                    </div>
-                                    <p class="text-slate-500 dark:text-slate-400 text-sm mb-3">📍 {{ client.address }}
-                                    </p>
-
-                                    <div class="flex gap-2">
-                                       <button @click="addStopNow(client)"
-                                          class="flex-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-bold text-xs py-2 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition">
-                                          + Añadir a Ruta
-                                       </button>
-                                       <a :href="'tel:' + client.phone"
-                                          class="flex-1 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs py-2 rounded-lg text-center hover:bg-slate-100 dark:hover:bg-slate-600 transition">
-                                          📞 Llamar
-                                       </a>
-                                    </div>
-                                 </div>
-                              </div>
-                           </div>
-                        </div>
-
-                        <!-- Search Results (Flat list) -->
-                        <div v-else class="space-y-3 px-4">
-                           <div v-for="client in filteredClients" :key="client.id"
-                              class="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
-                              <div class="flex justify-between items-start mb-2">
-                                 <h3 class="font-bold text-slate-900 dark:text-white text-lg">{{ client.name }}</h3>
-                                 <span
-                                    class="text-xs font-bold px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                    {{ client.client_type || 'Cliente' }}
-                                 </span>
-                              </div>
-                              <p class="text-slate-500 dark:text-slate-400 text-sm mb-3">📍 {{ client.address }}</p>
-
-                              <div class="flex gap-2">
-                                 <button @click="addStopNow(client)"
-                                    class="flex-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-bold text-xs py-2 rounded-lg">
-                                    + Añadir a Ruta
-                                 </button>
-                                 <a :href="'tel:' + client.phone"
-                                    class="flex-1 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs py-2 rounded-lg text-center">
-                                    📞 Llamar
-                                 </a>
-                              </div>
-                           </div>
-                        </div>
-                     </div>
-                     <div v-else class="text-center py-10 text-slate-500">
-                        <p>No se encontraron clientes.</p>
-                     </div>
-                  </div>
-
-                  <!-- TAB: STATS -->
-                  <div v-else-if="activeTab === 'resumen'" key="resumen">
-                     <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-6">Estadísticas (14 días)</h2>
-
-                     <div v-if="stats" class="grid grid-cols-2 gap-4 mb-6">
-                        <!-- Total Visits -->
-                        <div
-                           class="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl flex flex-col items-center justify-center text-center">
-                           <span class="text-3xl font-black text-indigo-600 dark:text-indigo-400">{{ stats.total_visits
+            <!-- Lista de clientes -->
+            <div v-else-if="clientesFiltrados.length > 0" class="space-y-3">
+               <div v-for="cliente in clientesFiltrados" :key="cliente.id"
+                  class="bg-gray-50 border-2 border-gray-200 rounded-xl p-5 hover:border-gray-900 cursor-pointer transition"
+                  @click="seleccionarCliente(cliente)">
+                  <div class="flex items-start justify-between">
+                     <div class="flex-1">
+                        <h4 class="text-lg font-bold text-gray-900">{{ cliente.name }}</h4>
+                        <p class="text-gray-600 text-sm">📍 {{ cliente.address }}</p>
+                        <div class="flex gap-4 mt-2">
+                           <span class="text-gray-700 text-xs font-mono">📞 {{ cliente.phone }}</span>
+                           <span v-if="cliente.email" class="text-gray-700 text-xs truncate">📧 {{ cliente.email
                               }}</span>
-                           <span
-                              class="text-xs font-bold text-indigo-800 dark:text-indigo-200 uppercase tracking-wide">Visitas
-                              Totales</span>
-                        </div>
-
-                        <!-- Success Rate -->
-                        <div
-                           class="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-2xl flex flex-col items-center justify-center text-center">
-                           <span class="text-3xl font-black text-emerald-600 dark:text-emerald-400">{{
-                              stats.completion_rate }}%</span>
-                           <span
-                              class="text-xs font-bold text-emerald-800 dark:text-emerald-200 uppercase tracking-wide">Tasa
-                              Validez</span>
-                        </div>
-
-                        <!-- Incidents -->
-                        <div class="col-span-2 p-4 rounded-2xl flex items-center justify-between"
-                           :class="stats.incidents > 0 ? 'bg-rose-50 dark:bg-rose-900/20' : 'bg-slate-50 dark:bg-slate-800'">
-                           <div class="flex items-center gap-3">
-                              <span class="text-2xl">{{ stats.incidents > 0 ? '⚠️' : '✅' }}</span>
-                              <div>
-                                 <h4 class="font-bold text-slate-900 dark:text-white">Incidentes / Errores</h4>
-                                 <p class="text-xs text-slate-500">Check-ins inválidos o fuera de rango</p>
-                              </div>
-                           </div>
-                           <span class="text-2xl font-black"
-                              :class="stats.incidents > 0 ? 'text-rose-600' : 'text-slate-400'">
-                              {{ stats.incidents }}
-                           </span>
                         </div>
                      </div>
-
-                     <!-- Detailed List Helper -->
-                     <div
-                        class="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 text-center">
-                        <p class="text-slate-500 dark:text-slate-400 text-sm mb-4">
-                           Este panel muestra tu rendimiento de las últimas 2 semanas. Si tienes incidentes, revisa tus
-                           check-ins
-                           anteriores en el detalle de ruta.
-                        </p>
-                        <button @click="fetchStats" class="text-indigo-600 font-bold text-sm hover:underline">🔄
-                           Actualizar datos</button>
-                     </div>
+                     <span
+                        class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-900 whitespace-nowrap">
+                        {{ cliente.client_type }}
+                     </span>
                   </div>
-
-               </transition>
+               </div>
             </div>
-         </main>
+
+            <!-- Sin resultados -->
+            <div v-else class="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center">
+               <p class="text-gray-600 text-sm">
+                  {{ searchQuery ? 'No se encontraron clientes' : 'Escribe para buscar clientes' }}
+               </p>
+            </div>
+
+            <!-- 📄 PAGINACIÓN -->
+            <div v-if="clientesFiltrados.length > 0" class="flex items-center justify-between mt-6 px-2">
+               <button @click="irAPagina(clientesMetadata.page - 1)" :disabled="!clientesMetadata.has_prev"
+                  class="px-4 py-2 rounded-lg font-semibold text-sm bg-gray-900 text-white disabled:bg-gray-400 transition">
+                  ← Anterior
+               </button>
+
+               <div class="text-center text-xs font-semibold text-gray-900">
+                  <p>Página {{ clientesMetadata.page }} de {{ clientesMetadata.total_pages }}</p>
+                  <p class="text-gray-600 text-xs mt-1">
+                     Mostrando {{ clientesFiltrados.length }} de {{ clientesMetadata.total }}
+                  </p>
+               </div>
+
+               <button @click="irAPagina(clientesMetadata.page + 1)" :disabled="!clientesMetadata.has_next"
+                  class="px-4 py-2 rounded-lg font-semibold text-sm bg-gray-900 text-white disabled:bg-gray-400 transition">
+                  Siguiente →
+               </button>
+            </div>
+
+            <!-- Selector de items por página -->
+            <div class="flex items-center justify-center gap-3 mt-4">
+               <label class="text-gray-600 text-sm font-semibold">Items por página:</label>
+               <select v-model.number="clientesMetadata.limit" @change="fetchClientes(1)"
+                  class="px-3 py-2 border-2 border-gray-300 rounded-lg text-sm focus:outline-none focus:border-gray-900">
+                  <option :value="50">50</option>
+                  <option :value="100">100</option>
+                  <option :value="200">200</option>
+               </select>
+            </div>
+         </div>
+
+         <!-- Historial de visitas -->
+         <div>
+            <h3 class="text-xl font-bold text-gray-900 mb-4">Historial de visitas</h3>
+
+            <div v-if="visitasRecientes.length > 0" class="space-y-3">
+               <div v-for="visita in visitasRecientes" :key="visita.id"
+                  class="bg-gray-50 border-2 border-gray-200 rounded-xl p-5">
+                  <div class="flex items-start justify-between mb-2">
+                     <h4 class="font-bold text-gray-900">{{ getNombreCliente(visita.client_id) }}</h4>
+                     <span class="px-3 py-1 rounded-full text-xs font-semibold"
+                        :class="visita.checkin_is_valid ? 'bg-green-200 text-green-900' : 'bg-red-200 text-red-900'">
+                        {{ visita.checkin_is_valid ? '✅ Válido' : '❌ Inválido' }}
+                     </span>
+                  </div>
+                  <p class="text-gray-600 text-sm mb-2">{{ formatDate(visita.checkin_time) }}</p>
+                  <p class="text-gray-700 text-sm">📍 Distancia: {{ visita.checkin_distance_meters.toFixed(1) }}m</p>
+               </div>
+            </div>
+
+            <div v-else class="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center">
+               <p class="text-gray-600 text-sm">Sin visitas registradas</p>
+            </div>
+         </div>
       </div>
 
-      <!-- Modal Checkin -->
-      <div v-if="showCheckinModal"
-         class="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-900/80 backdrop-blur-sm p-0 sm:p-4">
-         <div
-            class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <!-- MODAL CHECK-IN -->
+      <div v-if="showCheckinModal" class="fixed inset-0 bg-black/40 flex items-end z-50">
+         <div class="w-full bg-white rounded-t-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-2xl font-bold text-gray-900 mb-6">
+               Check-in: {{ getNombreCliente(rutaActual.client_id) }}
+            </h3>
 
-            <!-- Modal Header -->
-            <div
-               class="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
-               <div>
-                  <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Check-in para</p>
-                  <h3 class="text-xl font-bold text-slate-900 dark:text-white truncate max-w-[200px]">{{
-                     rutaActual?.client?.name }}</h3>
+            <div class="bg-gray-100 rounded-lg p-4 mb-6 text-center">
+               <p class="text-gray-600 text-sm mb-4">📍 Esperando ubicación...</p>
+               <div v-if="ubicacionActual" class="text-left space-y-2">
+                  <p class="text-gray-900 font-semibold">Ubicación detectada:</p>
+                  <p class="text-gray-700 text-sm">Latitud: {{ ubicacionActual.latitude.toFixed(5) }}</p>
+                  <p class="text-gray-700 text-sm">Longitud: {{ ubicacionActual.longitude.toFixed(5) }}</p>
+                  <p class="text-gray-700 text-sm">Precisión: ±{{ ubicacionActual.accuracy.toFixed(0) }}m</p>
                </div>
-               <button @click="cerrarCheckin"
-                  class="bg-slate-200 dark:bg-slate-800 h-10 w-10 rounded-full flex items-center justify-center text-slate-500 dark:text-slate-400 font-bold">✕</button>
             </div>
 
-            <!-- Modal Body -->
-            <div class="flex-1 overflow-y-auto p-5 space-y-6">
-
-               <!-- GPS Status -->
-               <div
-                  class="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 flex items-center gap-3 border border-slate-200 dark:border-slate-700">
-                  <div
-                     class="h-10 w-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0"
-                     v-if="ubicacionActual">
-                     📍
-                  </div>
-                  <div class="h-10 w-10 rounded-full bg-slate-200 animate-pulse flex-shrink-0" v-else></div>
-
-                  <div>
-                     <p class="text-sm font-bold text-slate-900 dark:text-white">
-                        {{ ubicacionActual ? 'Ubicación Detectada' : 'Buscando satélites...' }}
-                     </p>
-                     <p class="text-xs text-slate-500 dark:text-slate-400" v-if="ubicacionActual">
-                        Precisión: ±{{ ubicacionActual.accuracy.toFixed(0) }}m
-                     </p>
-                  </div>
-               </div>
-
-               <!-- Result Grid -->
-               <div>
-                  <label class="label-driver">Resultado de la visita</label>
-                  <div class="grid grid-cols-2 gap-3">
-                     <button v-for="res in resultadosVisita" :key="res.value" @click="visitResult = res.value"
-                        class="h-16 rounded-xl border-2 font-bold flex flex-col items-center justify-center transition-all"
-                        :class="visitResult === res.value
-                           ? 'border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200'
-                           : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'">
-                        <span class="text-xl">{{ res.icon }}</span>
-                        <span class="text-sm">{{ res.label }}</span>
-                     </button>
-                  </div>
-               </div>
-
-               <!-- Notes -->
-               <div>
-                  <label class="label-driver">Notas Rápidas</label>
-                  <input v-model="quickNotes" type="text" class="input-driver"
-                     placeholder="Ej: Muy interesado, volver lunes" />
-               </div>
-
-               <!-- Confirm Check -->
+            <div class="mb-6">
                <label
-                  class="flex items-center gap-4 bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                  <input type="checkbox" v-model="clienteEncontrado" class="w-6 h-6 accent-indigo-600 rounded">
-                  <span class="font-bold text-slate-700 dark:text-slate-200">Cliente encontrado en el sitio</span>
+                  class="flex items-center gap-4 p-4 border-2 border-gray-300 rounded-lg cursor-pointer hover:border-gray-900">
+                  <input v-model="clienteEncontrado" type="checkbox" class="w-6 h-6 accent-gray-900" />
+                  <span class="text-gray-900 font-semibold">✓ Cliente confirmado en la ubicación</span>
                </label>
-
             </div>
 
-            <!-- Modal Footer -->
-            <div class="p-5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
-               <button @click="hacerCheckin" :disabled="!puedeHacerCheckin || cargandoCheckin"
-                  class="btn-driver-primary disabled:opacity-50 disabled:bg-slate-300">
-                  {{ cargandoCheckin ? 'Guardando...' : 'CONFIRMAR VISITA' }}
+            <div class="mb-6">
+               <label class="block text-sm font-semibold text-gray-900 mb-2">Notas (opcional)</label>
+               <textarea v-model="notasCheckin" placeholder="Ej: Cliente no estaba disponible..."
+                  class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 text-sm"
+                  rows="3"></textarea>
+            </div>
+
+            <div class="flex gap-3">
+               <button @click="cerrarModal()"
+                  class="flex-1 bg-gray-100 text-gray-900 py-4 rounded-lg font-semibold text-lg hover:bg-gray-200 transition">
+                  Cancelar
+               </button>
+               <button @click="hacerCheckin()" :disabled="!ubicacionActual"
+                  class="flex-1 bg-gray-900 text-white py-4 rounded-lg font-semibold text-lg hover:bg-gray-800 transition disabled:bg-gray-400 disabled:cursor-not-allowed">
+                  {{ cargandoCheckin ? '⏳ Guardando...' : '📍 Confirmar Check-in' }}
                </button>
             </div>
          </div>
       </div>
 
-      <!-- Modal Nueva Parada -->
-      <div v-if="showAddStopModal"
-         class="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-slate-900/80 backdrop-blur-sm p-0 sm:p-4">
-         <div
-            class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl h-[85vh] flex flex-col">
-            <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-               <h3 class="text-lg font-bold text-slate-900 dark:text-white">Añadir Parada</h3>
-               <button @click="showAddStopModal = false" class="text-slate-500 font-bold text-lg">✕</button>
-            </div>
+      <!-- RESULTADO CHECK-IN -->
+      <div v-if="showResultado" class="fixed inset-0 bg-black/40 flex items-end z-50">
+         <div class="w-full bg-white rounded-t-2xl p-6 shadow-2xl">
+            <div class="text-center">
+               <div class="text-5xl mb-4">{{ resultadoCheckin.is_valid ? '✅' : '⚠️' }}</div>
+               <h3 class="text-2xl font-bold text-gray-900 mb-2">
+                  {{ resultadoCheckin.is_valid ? 'Check-in Válido' : 'Check-in con Advertencias' }}
+               </h3>
+               <p class="text-gray-600 text-lg mb-6">
+                  {{ resultadoCheckin.message }}
+               </p>
 
-            <div class="p-4 border-b border-slate-100 dark:border-slate-800 space-y-3">
-               <input v-model="searchQuery" type="text" placeholder="🔍 Buscar cliente..."
-                  class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 font-bold outline-none" />
-               <div class="grid grid-cols-2 gap-2">
-                  <div>
-                     <span class="text-xs font-bold text-slate-500 block mb-1">Fecha:</span>
-                     <input v-model="selectedDate" type="date"
-                        class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 font-bold outline-none" />
-                  </div>
-                  <div>
-                     <span class="text-xs font-bold text-slate-500 block mb-1">Hora:</span>
-                     <input v-model="selectedTime" type="time"
-                        class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 font-bold outline-none" />
-                  </div>
+               <div class="bg-gray-50 rounded-lg p-4 mb-6 text-center">
+                  <p class="text-gray-600 text-sm">Distancia al cliente</p>
+                  <p class="text-3xl font-bold text-gray-900">{{ resultadoCheckin.distance_meters.toFixed(1) }}m</p>
                </div>
-            </div>
 
-            <div class="flex-1 overflow-y-auto p-4 space-y-2">
-               <div v-for="client in filteredClients" :key="client.id" @click="addStopNow(client)"
-                  class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 active:bg-indigo-50 dark:active:bg-indigo-900/20 cursor-pointer">
-                  <h4 class="font-bold text-slate-900 dark:text-white">{{ client.name }}</h4>
-                  <p class="text-xs text-slate-500">{{ client.address }}</p>
+               <div v-if="resultadoCheckin.validation_error"
+                  class="bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-6 text-left">
+                  <p class="text-red-900 font-semibold text-sm">⚠️ {{ resultadoCheckin.validation_error }}</p>
+               </div>
+
+               <div class="flex gap-3">
+                  <button @click="cerrarResultado()"
+                     class="flex-1 bg-gray-900 text-white py-4 rounded-lg font-semibold text-lg hover:bg-gray-800 transition">
+                     {{ resultadoCheckin.is_valid ? 'Continuar' : 'Aceptar' }}
+                  </button>
                </div>
             </div>
          </div>
       </div>
-
    </div>
 </template>
 
 <script>
 export default {
-   name: 'ComercialV2',
+   name: 'Comercial',
    data() {
       return {
-         // Auth
          seller: null,
          sellerName: 'Vendedor',
-
-         // UI State
-         showSidebar: false,
-         activeTab: 'hoy',
-         tabs: [
-            { id: 'hoy', label: 'Hoy', icon: '🚙' },
-            { id: 'clientes', label: 'Clientes', icon: '👥' },
-            { id: 'historial', label: 'Historial', icon: '📜' },
-            { id: 'resumen', label: 'Stats', icon: '📊' }
-         ],
-
-         // Data
          routesHoy: [],
-         historialRutas: [],
-         myClients: [], // Stores all clients assigned to seller
+         visitasRecientes: [],
+
+         // 🔍 BÚSQUEDA Y PAGINACIÓN
+         clientesFiltrados: [],
          searchQuery: '',
-         routeSearchQuery: '', // Separate search for routes in Hoy tab
-         selectedDate: '',
-         selectedTime: '', // Time for new route stops
-         stats: null,
+         cargandoClientes: false,
+         searchTimeout: null,
+         clientesMetadata: {
+            page: 1,
+            limit: 100,
+            total: 0,
+            total_pages: 0,
+            has_next: false,
+            has_prev: false
+         },
 
-         // Directory Grouping
-         grupoActivo: 'ac',
-         gruposAlfabeticos: [
-            { id: 'ac', label: 'A–C', letras: ['A', 'B', 'C'] },
-            { id: 'df', label: 'D–F', letras: ['D', 'E', 'F'] },
-            { id: 'gi', label: 'G–I', letras: ['G', 'H', 'I'] },
-            { id: 'jl', label: 'J–L', letras: ['J', 'K', 'L'] },
-            { id: 'mo', label: 'M–O', letras: ['M', 'N', 'O'] },
-            { id: 'pr', label: 'P–R', letras: ['P', 'Q', 'R'] },
-            { id: 'st', label: 'S–T', letras: ['S', 'T'] },
-            { id: 'uz', label: 'U–Z', letras: ['U', 'V', 'W', 'X', 'Y', 'Z'] }
-         ],
-
-         // Modal State
+         // CHECK-IN
          showCheckinModal: false,
-         showAddStopModal: false,
-
+         showResultado: false,
          rutaActual: null,
+
          ubicacionActual: null,
-         visitResult: null,
-         quickNotes: '',
          clienteEncontrado: false,
+         notasCheckin: '',
          cargandoCheckin: false,
 
-         resultadosVisita: [
-            { value: 'venta', label: 'Venta', icon: '💰' },
-            { value: 'interesado', label: 'Interesado', icon: '👍' },
-            { value: 'seguimiento', label: 'Seguimiento', icon: '👋' },
-            { value: 'no_venta', label: 'No Venta', icon: '❌' },
-            { value: 'ausente', label: 'Ausente', icon: '🚪' }
-         ]
-      }
-   },
-   computed: {
-      puedeHacerCheckin() {
-         return this.visitResult && this.quickNotes.length > 3 && this.ubicacionActual
-      },
-      filteredClients() {
-         if (!this.searchQuery) return this.myClients
-         const lower = this.searchQuery.toLowerCase()
-         return this.myClients.filter(c =>
-            c.name.toLowerCase().includes(lower) ||
-            c.address.toLowerCase().includes(lower)
-         )
-      },
-      filteredRoutesHoy() {
-         if (!this.routeSearchQuery) return this.routesHoy
-         const lower = this.routeSearchQuery.toLowerCase()
-         return this.routesHoy.filter(r =>
-            r.client?.name?.toLowerCase().includes(lower)
-         )
-      },
-      todayStats() {
-         const total = this.routesHoy.length
-         const completed = this.routesHoy.filter(r => r.status === 'completed').length
-         const percentage = total > 0 ? Math.round((completed / total) * 100) : 0
-         return { total, completed, percentage }
+         resultadoCheckin: null,
+         geoWatcher: null
       }
    },
    mounted() {
       const sellerData = localStorage.getItem('seller')
-      if (!sellerData) return this.$router.push('/login')
+      if (!sellerData) {
+         this.$router.push('/login')
+         return
+      }
 
       this.seller = JSON.parse(sellerData)
       this.sellerName = this.seller.name
 
-      this.fetchData()
-      this.fetchMyClients()
-      this.fetchStats()
-      this.startGPS()
+      this.fetchRutasHoy()
+      this.fetchVisitas()
+      this.fetchClientes(1)  // Cargar primera página
+      this.iniciarGPS()
+   },
+   beforeUnmount() {
+      if (this.geoWatcher) {
+         navigator.geolocation.clearWatch(this.geoWatcher)
+      }
+      if (this.searchTimeout) {
+         clearTimeout(this.searchTimeout)
+      }
    },
    methods: {
-      toggleSidebar() {
-         this.showSidebar = !this.showSidebar
+      // 🔍 BÚSQUEDA CON DEBOUNCE
+      handleSearch() {
+         // Limpiar timeout anterior
+         if (this.searchTimeout) {
+            clearTimeout(this.searchTimeout)
+         }
+
+         // Esperar 500ms sin que el usuario escriba para buscar
+         this.searchTimeout = setTimeout(() => {
+            this.fetchClientes(1)  // Volver a página 1 cuando busca
+         }, 500)
       },
 
-      async fetchData() {
+      // 📄 CARGAR CLIENTES CON PAGINACIÓN
+      async fetchClientes(page = 1) {
+         try {
+            this.cargandoClientes = true
+
+            // Construir URL con parámetros
+            const params = new URLSearchParams({
+               page: page,
+               limit: this.clientesMetadata.limit,
+               ...(this.searchQuery && { search: this.searchQuery })
+            })
+
+            const response = await fetch(
+               `${import.meta.env.VITE_API_URL}/clients/?${params.toString()}`
+            )
+
+            const data = await response.json()
+
+            this.clientesFiltrados = data.data || []
+            this.clientesMetadata = data.pagination || {}
+         } catch (e) {
+            console.error('Error fetching clientes:', e)
+            this.clientesFiltrados = []
+         } finally {
+            this.cargandoClientes = false
+         }
+      },
+
+      // ⬅️ ➡️ NAVEGAR ENTRE PÁGINAS
+      irAPagina(page) {
+         if (page >= 1 && page <= this.clientesMetadata.total_pages) {
+            this.fetchClientes(page)
+            // Scroll al top
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+         }
+      },
+
+      // 👆 SELECCIONAR CLIENTE DESDE LISTA
+      seleccionarCliente(cliente) {
+         // Podrías crear una ruta rápida aquí
+         console.log('Cliente seleccionado:', cliente)
+         // TODO: Mostrar opciones (crear ruta, ver historial, etc)
+      },
+
+      async fetchRutasHoy() {
          try {
             const response = await fetch(`${import.meta.env.VITE_API_URL}/routes/?seller_id=${this.seller.id}`)
-            const all = await response.json()
+            const todas = await response.json()
+
             const hoy = new Date().toISOString().split('T')[0]
-            // Sort already handled by backend but double check or resort local if needed
-            this.routesHoy = all.filter(r => r.planned_date?.startsWith(hoy))
-         } catch (e) { console.error(e) }
-      },
-
-      async fetchMyClients() {
-         try {
-            // Fetch ALL clients as requested, to allow adding any client to route
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/`)
-            if (response.ok) {
-               this.myClients = await response.json()
-            } else {
-               console.error("Failed to fetch clients")
-            }
-         } catch (e) { console.error(e) }
-      },
-
-      async fetchStats() {
-         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/sellers/${this.seller.id}/stats`)
-            if (response.ok) {
-               this.stats = await response.json()
-            }
-         } catch (e) { console.error("Stats error", e) }
-      },
-
-      // --- REORDER LOGIC ---
-      async moveRoute(index, direction) {
-         if (index + direction < 0 || index + direction >= this.routesHoy.length) return;
-
-         // Swap locally
-         const temp = this.routesHoy[index];
-         this.routesHoy[index] = this.routesHoy[index + direction];
-         this.routesHoy[index + direction] = temp;
-
-         // Push update to backend
-         try {
-            const routeIds = this.routesHoy.map(r => r.id);
-            await fetch(`${import.meta.env.VITE_API_URL}/routes/reorder/`, {
-               method: 'PUT',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ route_ids: routeIds })
-            });
+            this.routesHoy = todas.filter(r => r.planned_date.split('T')[0] === hoy)
          } catch (e) {
-            console.error("Failed to reorder", e);
-            // Revert on error could be implemented here
+            console.error('Error:', e)
          }
       },
 
-      // --- ADD STOP LOGIC ---
-      abrirModalParada() {
-         this.showAddStopModal = true
-         this.searchQuery = ''
-         this.selectedDate = new Date().toISOString().split('T')[0] // Default to today
-         // Default time to 1 hour from now
-         const now = new Date()
-         now.setHours(now.getHours() + 1)
-         this.selectedTime = now.toTimeString().slice(0, 5) // HH:MM format
-      },
-
-      async addStopNow(client) {
-         if (!this.selectedDate) {
-            this.selectedDate = new Date().toISOString().split('T')[0]
-         }
-
-         if (!confirm(`¿Añadir parada para ${client.name} el ${this.selectedDate}?`)) return;
-
+      async fetchVisitas() {
          try {
-            // ✅ Combine date and time into datetime string
-            let plannedDate = this.selectedDate
-            if (this.selectedTime) {
-               plannedDate = `${this.selectedDate}T${this.selectedTime}:00`
-            }
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/visits/`)
+            this.visitasRecientes = await response.json()
+         } catch (e) {
+            console.error('Error:', e)
+         }
+      },
 
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/routes/`, {
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({
-                  seller_id: this.seller.id,
-                  client_id: client.id,
-                  planned_date: plannedDate,
-                  status: 'pending'
-               })
-            });
+      iniciarGPS() {
+         if (!navigator.geolocation) {
+            alert('Geolocalización no disponible en tu dispositivo')
+            return
+         }
 
-            if (response.ok) {
-               this.showAddStopModal = false
-               // Only switch tab if date is today
-               const today = new Date().toISOString().split('T')[0]
-               if (this.selectedDate === today) {
-                  this.activeTab = 'hoy'
-               } else {
-                  alert("Ruta añadida exitosamente para " + this.selectedDate)
+         navigator.geolocation.getCurrentPosition(
+            (position) => {
+               this.ubicacionActual = {
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude,
+                  accuracy: position.coords.accuracy
                }
-               this.fetchData() // Refresh list
-            } else {
-               alert("Error al añadir la ruta")
-            }
-         } catch (e) {
-            alert("Error de red al añadir parada")
-         }
-      },
+            },
+            (error) => {
+               console.error('GPS error:', error.message)
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+         )
 
-      startGPS() {
-         if ("geolocation" in navigator) {
-            navigator.geolocation.watchPosition(
-               pos => {
-                  this.ubicacionActual = {
-                     latitude: pos.coords.latitude,
-                     longitude: pos.coords.longitude,
-                     accuracy: pos.coords.accuracy
-                  }
-               },
-               err => console.error(err),
-               { enableHighAccuracy: true }
-            )
-         }
+         this.geoWatcher = navigator.geolocation.watchPosition(
+            (position) => {
+               this.ubicacionActual = {
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude,
+                  accuracy: position.coords.accuracy
+               }
+            },
+            (error) => {
+               console.error('GPS watch error:', error.message)
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+         )
       },
 
       iniciarCheckin(ruta) {
          this.rutaActual = ruta
-         this.showCheckinModal = true
-         this.quickNotes = ''
-         this.visitResult = null
          this.clienteEncontrado = false
-      },
-
-      cerrarCheckin() {
-         this.showCheckinModal = false
+         this.notasCheckin = ''
+         this.showCheckinModal = true
       },
 
       async hacerCheckin() {
-         this.cargandoCheckin = true
-         try {
-            const payload = {
-               route_id: this.rutaActual.id,
-               seller_id: this.seller.id,
-               client_id: this.rutaActual.client_id,
-               latitude: this.ubicacionActual.latitude,
-               longitude: this.ubicacionActual.longitude,
-               visit_result: this.visitResult,
-               quick_notes: this.quickNotes,
-               client_found: this.clienteEncontrado
-            }
+         if (!this.ubicacionActual) {
+            alert('Ubicación no disponible')
+            return
+         }
 
-            await fetch(`${import.meta.env.VITE_API_URL}/visits/checkin/v2/`, {
+         this.cargandoCheckin = true
+
+         try {
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/visits/checkin/`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify(payload)
+               body: JSON.stringify({
+                  route_id: this.rutaActual.id,
+                  seller_id: this.rutaActual.seller_id,
+                  client_id: this.rutaActual.client_id,
+                  latitude: this.ubicacionActual.latitude,
+                  longitude: this.ubicacionActual.longitude,
+                  client_found: this.clienteEncontrado,
+                  notes: this.notasCheckin || null
+               })
             })
 
+            this.resultadoCheckin = await response.json()
             this.showCheckinModal = false
-            this.fetchData() // refresh
+            this.showResultado = true
+            this.fetchVisitas()
          } catch (e) {
-            alert("Error en check-in")
+            console.error('Error en check-in:', e)
+            alert('Error al hacer check-in')
          } finally {
             this.cargandoCheckin = false
          }
       },
 
-      // Helpers
-      formatTime(dateStr) {
-         if (!dateStr) return '--:--'
-         return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      cerrarModal() {
+         this.showCheckinModal = false
+         this.rutaActual = null
+         this.clienteEncontrado = false
+         this.notasCheckin = ''
       },
-      formatDateShort(dateStr) {
-         return new Date(dateStr).toLocaleDateString([], { month: 'short', day: 'numeric' })
+
+      cerrarResultado() {
+         this.showResultado = false
+         this.resultadoCheckin = null
       },
-      getStatusLabel(status) {
-         const map = { pending: 'Pendiente', completed: 'Completada', in_progress: 'En curso', cancelled: 'Cancelada' }
-         return map[status] || status
+
+      getNombreCliente(id) {
+         const c = this.clientesFiltrados.find(x => x.id === id)
+         return c ? c.name : 'Desconocido'
       },
-      getStatusBadgeClass(status) {
-         const map = {
-            pending: 'bg-slate-100 text-slate-600',
-            completed: 'bg-emerald-100 text-emerald-800',
-            in_progress: 'bg-indigo-100 text-indigo-800',
-            cancelled: 'bg-rose-100 text-rose-800'
-         }
-         return map[status] || 'bg-gray-100'
+
+      getClienteDireccion(id) {
+         const c = this.clientesFiltrados.find(x => x.id === id)
+         return c ? c.address : 'Sin dirección'
       },
-      clientesEnGrupo(letras) {
-         return this.filteredClients.filter(c => {
-            const inicial = c.name.charAt(0).toUpperCase()
-            return letras.includes(inicial)
+
+      formatDate(date) {
+         return new Date(date).toLocaleDateString('es-ES', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
          })
       },
 
-      contarClientesEnGrupo(letras) {
-         return this.clientesEnGrupo(letras).length
-      },
-
-      scrollToGroup(grupoId) {
-         this.grupoActivo = grupoId
-         const element = document.getElementById('grupo-' + grupoId)
-         if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-         }
+      verVisita(rutaId) {
+         // TODO: Ver detalles de visita
       },
 
       logout() {
-         localStorage.removeItem('seller')
          localStorage.removeItem('token')
          this.$router.push('/login')
-      },
-      mostrarAplazar(ruta) {
-         alert("Funcionalidad de aplazar (TODO)")
-      },
-      verDetalleVisita(ruta) {
-         alert("Detalle visita (TODO)")
       }
    }
 }
 </script>
 
 <style scoped>
-.animate-fade-in-up {
-   animation: fadeInUp 0.3s ease-out;
-}
-
-@keyframes fadeInUp {
-   from {
-      opacity: 0;
-      transform: translateY(20px);
-   }
-
-   to {
-      opacity: 1;
-      transform: translateY(0);
-   }
-}
-
-/* Hide scrollbar for Chrome, Safari and Opera */
-.no-scrollbar::-webkit-scrollbar {
-   display: none;
-}
-
-/* Hide scrollbar for IE, Edge and Firefox */
-.no-scrollbar {
-   -ms-overflow-style: none;
-   /* IE and Edge */
-   scrollbar-width: none;
-   /* Firefox */
+* {
+   -webkit-font-smoothing: antialiased;
 }
 </style>

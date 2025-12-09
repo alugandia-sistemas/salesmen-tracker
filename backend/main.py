@@ -951,20 +951,54 @@ def get_route_tracking(seller_id: str, db: Session = Depends(get_db)):
 # --- CLIENTES ---
 
 @app.get("/clients/")
-def list_clients(db: Session = Depends(get_db)):
-    """Listar clientes con coordenadas convertidas a lat/lng"""
-    from sqlalchemy import func
+def list_clients(
+    page: int = Query(1, ge=1),  # Página (mínimo 1)
+    limit: int = Query(100, ge=10, le=500),  # Items por página (10-500)
+    search: Optional[str] = Query(None),  # Búsqueda: nombre o teléfono
+    db: Session = Depends(get_db)
+):
+    """
+    ✅ PAGINACIÓN + BÚSQUEDA OPTIMIZADA
     
-    clients_db = db.query(Client).filter(Client.status == "active").order_by(Client.name).all()
+    Ejemplos:
+    GET /clients/?page=1&limit=100
+    GET /clients/?page=2&limit=50&search=cerraj
+    GET /clients/?search=600123456
+    """
+    from sqlalchemy import func, or_
     
+    # Construir query base
+    query = db.query(Client).filter(Client.status == "active")
+    
+    # 🔍 BÚSQUEDA: nombre o teléfono
+    if search and len(search.strip()) > 0:
+        search_term = f"%{search.strip().lower()}%"
+        query = query.filter(
+            or_(
+                func.lower(Client.name).like(search_term),
+                Client.phone.like(search_term),
+                Client.email.like(search_term)
+            )
+        )
+    
+    # Contar total de resultados (para paginación)
+    total_count = query.count()
+    
+    # Calcular offset
+    offset = (page - 1) * limit
+    total_pages = (total_count + limit - 1) // limit  # Redondeo hacia arriba
+    
+    # ✅ PAGINATION: traer solo los items necesarios
+    clients_db = query.order_by(Client.name).offset(offset).limit(limit).all()
+    
+    # Convertir Geography a lat/lng
     result = []
     for client in clients_db:
         try:
-            # Convertir Geography a WKT: "POINT(-0.187 38.960)"
-            coords_wkt = db.query(func.ST_AsText(client.location)).scalar()
+            from sqlalchemy import func as sqlfunc
+            coords_wkt = db.query(sqlfunc.ST_AsText(client.location)).scalar()
             
             if coords_wkt and coords_wkt.startswith("POINT"):
-                # Parse "POINT(lng lat)"
                 coords_str = coords_wkt.replace("POINT(", "").replace(")", "")
                 lng, lat = map(float, coords_str.split())
             else:
@@ -986,7 +1020,18 @@ def list_clients(db: Session = Depends(get_db)):
             print(f"⚠️ Error procesando cliente {client.id}: {str(e)}")
             continue
     
-    return result
+    # 📊 RESPUESTA CON METADATOS DE PAGINACIÓN
+    return {
+        "data": result,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total_count,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1
+        }
+    }
 
 
 @app.post("/clients/")
