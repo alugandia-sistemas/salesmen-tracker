@@ -128,7 +128,10 @@
             <!-- CLIENTES TAB -->
             <div v-else-if="activeTab === 'clientes'" key="clientes">
               <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">Clientes</h2>
+                <div>
+                  <h2 class="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">Clientes</h2>
+                  <p class="text-xs text-slate-500 mt-1">Loaded: {{clientesPaginados.length}} | Total: {{clientesMetadata.total}}</p>
+                </div>
                 <button @click="showClienteModal = true"
                   class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-500 transition text-sm flex items-center gap-2">
                   <span>+</span> <span class="hidden md:inline">Nuevo Cliente</span>
@@ -430,33 +433,111 @@
     <div v-if="showRutaModal"
       class="fixed inset-0 bg-black/50 z-[60] flex items-end md:items-center justify-center backdrop-blur-sm p-0 md:p-4">
       <div
-        class="bg-white dark:bg-slate-900 w-full md:max-w-md md:rounded-2xl rounded-t-3xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+        class="bg-white dark:bg-slate-900 w-full md:max-w-2xl md:rounded-2xl rounded-t-3xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
         <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-6">
           {{ editingRuta ? 'Editar Ruta' : 'Nueva Ruta' }}
         </h3>
         <form @submit.prevent="saveRuta" class="space-y-4">
+          <!-- Vendedor Picker -->
           <div>
             <label class="label-driver-sm">Vendedor</label>
             <select v-model="formRuta.seller_id" class="input-driver-sm" required>
-              <option value="">-- Selecciona --</option>
-              <option v-for="v in vendedores" :key="v.id" :value="v.id">{{ v.name }}</option>
+              <option value="">-- Selecciona Vendedor --</option>
+              <option v-for="v in vendedores" :key="v.id" :value="v.id">👤 {{ v.name }}</option>
             </select>
           </div>
 
-          <div>
-            <label class="label-driver-sm">Cliente</label>
-            <select v-model="formRuta.client_id" class="input-driver-sm" required>
-              <option value="">-- Selecciona --</option>
-              <option v-for="c in clientes" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
+          <!-- Date & Time Pickers (horizontal) -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="label-driver-sm">Fecha</label>
+              <input v-model="formRuta.planned_date" type="date" class="input-driver-sm" required />
+            </div>
+            <div>
+              <label class="label-driver-sm">Hora</label>
+              <input v-model="routeTime" type="time" class="input-driver-sm" />
+            </div>
           </div>
 
-          <div>
-            <label class="label-driver-sm">Fecha</label>
-            <input v-model="formRuta.planned_date" type="date" class="input-driver-sm" required />
+          <!-- Client Selection Dropdown (Searchable) -->
+          <div class="relative">
+            <label class="label-driver-sm">Seleccionar Cliente</label>
+            <div class="relative">
+              <!-- Search Input -->
+              <input 
+                v-model="routeClientSearch" 
+                type="text" 
+                placeholder="Escribe nombre, dirección o teléfono..." 
+                class="input-driver-sm w-full pr-10"
+                @focus="routeClientSearchOpen = true"
+                @blur="setTimeout(() => routeClientSearchOpen = false, 200)"
+                @input="handleRouteClientSearch"
+              />
+              <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none">
+                🔍
+              </div>
+
+              <!-- Dropdown List -->
+              <div 
+                v-if="routeClientSearchOpen || routeClientSearch"
+                class="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg max-h-64 overflow-y-auto shadow-lg z-50"
+              >
+                <!-- Loading State -->
+                <div v-if="routeClientSearchLoading" class="px-4 py-4 text-center text-indigo-600 dark:text-indigo-400 text-sm font-medium">
+                  🔍 Buscando clientes...
+                </div>
+                <!-- Results -->
+                <div v-else-if="filteredRouteClientes.length > 0" class="divide-y divide-slate-200 dark:divide-slate-700">
+                  <button 
+                    v-for="client in filteredRouteClientes" 
+                    :key="client.id"
+                    type="button"
+                    @click="selectRouteClient(client)"
+                    class="w-full text-left px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition flex items-center gap-3"
+                  >
+                    <div class="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
+                      {{ client.name.charAt(0).toUpperCase() }}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="font-bold text-slate-900 dark:text-white text-sm">{{ client.name }}</p>
+                      <p class="text-xs text-slate-600 dark:text-slate-400 truncate">📍 {{ client.address }}</p>
+                    </div>
+                  </button>
+                </div>
+                <!-- Empty State -->
+                <div v-else class="px-4 py-4 text-center text-slate-500 dark:text-slate-400 text-sm">
+                  {{ routeClientSearch ? 'No se encontraron clientes' : 'Escribe para buscar' }}
+                </div>
+              </div>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              {{ routeClientSearch ? filteredRouteClientes.length + ' encontrados' : filteredRouteClientes.length + ' de ' + clientes.length + ' clientes' }}
+            </p>
           </div>
 
-          <div>
+          <!-- Selected Client Display -->
+          <div v-if="formRuta.client_id" class="bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-200 dark:border-indigo-700 rounded-lg p-4">
+            <p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase mb-2">✅ Cliente Seleccionado</p>
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold">
+                {{ getNombreCliente(formRuta.client_id).charAt(0).toUpperCase() }}
+              </div>
+              <div>
+                <p class="font-bold text-slate-900 dark:text-white">{{ getNombreCliente(formRuta.client_id) }}</p>
+                <p class="text-sm text-slate-600 dark:text-slate-400">📍 {{ getClienteAddress(formRuta.client_id) }}</p>
+              </div>
+              <button 
+                type="button"
+                @click="formRuta.client_id = ''; routeClientSearch = ''"
+                class="ml-auto text-red-600 hover:text-red-700 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- Estado -->
+          <div v-if="editingRuta">
             <label class="label-driver-sm">Estado</label>
             <select v-model="formRuta.status" class="input-driver-sm" required>
               <option value="pending">⏳ Pendiente</option>
@@ -470,8 +551,9 @@
             <button type="button" @click="closeRutaModal()"
               class="flex-1 py-3 text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancelar</button>
             <button type="submit"
-              class="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-500">{{
-                editingRuta ? 'Guardar' : 'Crear' }}</button>
+              class="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              :disabled="!formRuta.seller_id || !formRuta.client_id || !formRuta.planned_date"
+            >{{ editingRuta ? 'Guardar' : 'Crear Ruta' }}</button>
           </div>
         </form>
       </div>
@@ -619,6 +701,14 @@ export default {
       formCliente: { name: '', address: '', phone: '', email: '', latitude: 0, longitude: 0, client_type: '' },
       formRuta: { seller_id: '', client_id: '', planned_date: '', status: 'pending' },
 
+      // Route creation helpers
+      routeClientSearch: '',
+      routeClientSearchOpen: false,
+      routeClientSearchTimeout: null,
+      filteredRouteClientes: [],
+      routeClientSearchLoading: false,
+      routeTime: '09:00',
+
       // Mapeo de tipos de cliente
       tiposCliente: {
         'carpintero_metalico': '🔧 Carpintero Metálico',
@@ -632,7 +722,11 @@ export default {
         'carpenter': '🔧 Carpintero',
         'installer': '🔨 Instalador',
         'industrial': '🏭 Industrial'
-      }
+      },
+
+      // Complete client map - loaded once at startup
+      clientesMap: {},
+      clientesMapLoaded: false
     }
   },
   computed: {
@@ -673,16 +767,42 @@ export default {
       return sortedGrouped
     }
   },
+  watch: {
+    clientesPaginados(newVal) {
+      // Keep clientes in sync for route creation
+      if (newVal && newVal.length > 0) {
+        this.clientes = newVal
+      }
+    },
+    activeTab(newTab) {
+      // Reload clients when switching to clientes tab
+      if (newTab === 'clientes' && this.clientesPaginados.length === 0) {
+        console.log('🔄 Switching to clientes tab - reloading data...')
+        this.fetchClientes(1)
+      }
+    }
+  },
   mounted() {
+    console.log('✅ AdminGestion mounted - initializing data fetch...')
     this.fetchVendedores()
     this.fetchClientes()
     this.fetchRutas()
+    this.loadAllClientes() // Load complete client map for O(1) lookups
 
     // Verificar si viene con tab específico desde query params
     const tab = this.$route.query.tab
     if (tab) {
       this.activeTab = tab
     }
+    
+    // Log current state after a brief delay to see what was loaded
+    setTimeout(() => {
+      console.log('📊 State after mounted:')
+      console.log('  - clientesPaginados.length:', this.clientesPaginados.length)
+      console.log('  - clientes.length:', this.clientes.length)
+      console.log('  - clientesMetadata:', this.clientesMetadata)
+      console.log('  - loadingClientes:', this.loadingClientes)
+    }, 500)
   },
   methods: {
     toggleSidebar() {
@@ -699,14 +819,24 @@ export default {
     async fetchClientes(page = 1) {
       try {
         this.loadingClientes = true
+        console.log('🔍 fetchClientes called with page:', page)
         const params = new URLSearchParams({
           page: page,
           limit: this.clientesMetadata.limit,
           ...(this.clientesSearchQuery && { search: this.clientesSearchQuery })
         })
 
+        console.log('📡 Fetching from:', `${import.meta.env.VITE_API_URL}/clients/?${params.toString()}`)
         const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/?${params.toString()}`)
+        console.log('📊 Response status:', response.status, response.ok)
+        
+        if (!response.ok) {
+          console.error('❌ Error response from API:', response.status, response.statusText)
+          this.clientesPaginados = []
+          return
+        }
         const data = await response.json()
+        console.log('✅ Data received:', data)
 
         // Support both paginated response { data: [...], pagination: {...} }
         // and simple array response [ ... ] (older backend)
@@ -727,8 +857,10 @@ export default {
           // Also update clientes array for backwards compatibility
           this.clientes = data.data || []
         }
+        console.log('✨ Clientes loaded:', this.clientesPaginados.length, 'items in paginados array')
+        console.log('📋 clientesMetadata:', this.clientesMetadata)
       } catch (e) {
-        console.error('Error fetching clientes:', e)
+        console.error('❌ Error fetching clientes:', e)
         this.clientesPaginados = []
       } finally {
         this.loadingClientes = false
@@ -752,6 +884,43 @@ export default {
       if (this.clientesMetadata.has_prev) {
         this.fetchClientes(this.clientesMetadata.page - 1)
         window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    },
+    async loadAllClientes() {
+      // Load ALL clients into memory indexed by ID - single operation at startup
+      if (this.clientesMapLoaded) return
+      
+      try {
+        console.log('📦 Loading all clients into memory...')
+        const allClientes = []
+        let page = 1
+        let hasMore = true
+        
+        while (hasMore) {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/?page=${page}&limit=100`)
+          const data = await response.json()
+          
+          if (Array.isArray(data)) {
+            allClientes.push(...data)
+            hasMore = false
+          } else {
+            allClientes.push(...(data.data || []))
+            hasMore = data.pagination?.has_next || false
+          }
+          
+          page++
+        }
+        
+        // Create indexed map for O(1) lookups
+        this.clientesMap = {}
+        allClientes.forEach(client => {
+          this.clientesMap[client.id] = client
+        })
+        
+        this.clientesMapLoaded = true
+        console.log(`✅ Loaded ${Object.keys(this.clientesMap).length} clients into memory`)
+      } catch (e) {
+        console.error('❌ Error loading all clients:', e)
       }
     },
     async fetchRutas() {
@@ -891,10 +1060,72 @@ export default {
     editRuta(r) {
       this.editingRuta = r.id
       this.formRuta = { ...r }
+      // Parse time from planned_date for the time picker
+      const date = new Date(r.planned_date)
+      this.routeTime = date.toTimeString().slice(0, 5)
       this.showRutaModal = true
+      // Initialize filtered list with all clients
+      this.filteredRouteClientes = [...this.clientes]
+      this.routeClientSearchOpen = false
+      this.routeClientSearch = ''
+    },
+    async handleRouteClientSearch() {
+      if (this.routeClientSearchTimeout) {
+        clearTimeout(this.routeClientSearchTimeout)
+      }
+      
+      const query = this.routeClientSearch.toLowerCase().trim()
+      
+      // If search is empty, show initial 25 clients
+      if (query === '') {
+        this.filteredRouteClientes = [...this.clientes]
+        return
+      }
+      
+      // Debounce API search
+      this.routeClientSearchTimeout = setTimeout(async () => {
+        try {
+          this.routeClientSearchLoading = true
+          const params = new URLSearchParams({
+            search: query,
+            limit: 50  // Limit to 50 results to keep response small
+          })
+          
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/?${params.toString()}`)
+          const data = await response.json()
+          
+          // Extract clients from paginated response
+          if (Array.isArray(data)) {
+            this.filteredRouteClientes = data
+          } else {
+            this.filteredRouteClientes = data.data || []
+          }
+        } catch (e) {
+          console.error('Error searching clients:', e)
+          this.filteredRouteClientes = []
+        } finally {
+          this.routeClientSearchLoading = false
+        }
+      }, 300)
+    },
+    selectRouteClient(client) {
+      this.formRuta.client_id = client.id
+      this.routeClientSearch = ''
+      this.filteredRouteClientes = []
+      this.routeClientSearchOpen = false
+    },
+    getClienteAddress(clientId) {
+      const c = this.clientes.find(x => x.id === clientId)
+      return c ? c.address : 'Sin dirección'
     },
     async saveRuta() {
       try {
+        // Merge date and time: formRuta.planned_date is YYYY-MM-DD, routeTime is HH:MM
+        let plannedDateTime = this.formRuta.planned_date
+        if (this.routeTime && this.formRuta.planned_date) {
+          plannedDateTime = `${this.formRuta.planned_date}T${this.routeTime}:00`
+        }
+
         const url = this.editingRuta
           ? `${import.meta.env.VITE_API_URL}/routes/${this.editingRuta}`
           : `${import.meta.env.VITE_API_URL}/routes/`
@@ -906,7 +1137,7 @@ export default {
           body: JSON.stringify({
             seller_id: this.formRuta.seller_id,
             client_id: this.formRuta.client_id,
-            planned_date: this.formRuta.planned_date,
+            planned_date: plannedDateTime,
             status: this.formRuta.status
           })
         })
@@ -937,6 +1168,10 @@ export default {
       this.showRutaModal = false
       this.editingRuta = null
       this.formRuta = { seller_id: '', client_id: '', planned_date: '', status: 'pending' }
+      this.routeClientSearch = ''
+      this.routeClientSearchOpen = false
+      this.filteredRouteClientes = []
+      this.routeTime = '09:00'
     },
 
     // HELPERS
@@ -948,8 +1183,9 @@ export default {
       return v ? v.name : 'Desconocido'
     },
     getNombreCliente(id) {
-      const c = this.clientes.find(x => x.id === id)
-      return c ? c.name : 'Desconocido'
+      // O(1) lookup in indexed map
+      const client = this.clientesMap[id]
+      return client ? client.name : 'Desconocido'
     },
     formatDate(date) {
       return new Date(date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
