@@ -4,7 +4,10 @@
     <nav class="bg-white border-b border-gray-200 sticky top-0 z-30">
       <div class="px-4 py-4">
         <div class="flex justify-between items-center">
-          <h1 class="text-2xl font-bold text-gray-900">{{ currentSectionTitle }}</h1>
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">¡Hola, {{ sellerName }}!</h1>
+            <h2 class="text-green-700 mt-1">{{ currentSectionTitle }}</h2>
+          </div>
           <button @click="logout" class="text-gray-600 hover:text-gray-900 text-sm">
             Salir
           </button>
@@ -380,6 +383,7 @@ export default {
     return {
       activeSection: 'route', // 'route', 'schedule', 'clients'
       seller: null,
+      sellerName: 'Vendedor',
 
       // Route section
       routesToday: [],
@@ -473,6 +477,7 @@ export default {
     }
 
     this.seller = JSON.parse(sellerData)
+    this.sellerName = this.seller.name || 'Vendedor'
 
     // Set default date to today
     const today = new Date().toISOString().split('T')[0]
