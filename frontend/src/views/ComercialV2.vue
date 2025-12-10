@@ -375,24 +375,28 @@ export default {
          cargandoCheckin: false,
 
          resultadoCheckin: null,
-         geoWatcher: null
+         geoWatcher: null,
+
+         // ✅ NUEVO: Mapa de clientes
+         clientesMap: {},
+         clientesMapLoaded: false,
       }
    },
-   mounted() {
-      const sellerData = localStorage.getItem('seller')
-      if (!sellerData) {
-         this.$router.push('/login')
-         return
-      }
-
-      this.seller = JSON.parse(sellerData)
-      this.sellerName = this.seller.name
-
-      this.fetchRutasHoy()
-      this.fetchVisitas()
-      this.fetchClientes(1)  // Cargar primera página
-      this.fetchHistoricStats()  // Cargar estadísticas históricas
-      this.iniciarGPS()
+   async mounted() {
+    const sellerData = localStorage.getItem('seller')
+    if (sellerData) {
+        this.seller = JSON.parse(sellerData)
+        this.sellerName = this.seller.name.split(' ')[0]
+        
+        // 🔑 CRÍTICO: Cargar clientes PRIMERO
+        await this.loadAllClientes()
+        
+        this.fetchRoutesHoy()
+        this.fetchClientes(1)
+        this.fetchHistoricStats()
+    } else {
+        this.$router.push('/login')
+    }
    },
    beforeUnmount() {
       if (this.geoWatcher) {
@@ -612,7 +616,51 @@ export default {
       logout() {
          localStorage.removeItem('token')
          this.$router.push('/login')
-      }
+      },
+      async loadAllClientes() {
+         if (this.clientesMapLoaded) return
+         
+         try {
+            console.log('📦 ComercialV2: Cargando clientes...')
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/sync/`)
+            
+            if (response.ok) {
+               const data = await response.json()
+               const allClientes = data.clients || []
+               
+               this.clientesMap = {}
+               allClientes.forEach(client => {
+               this.clientesMap[client.id] = client
+               })
+               
+               this.clientesMapLoaded = true
+               console.log(`✅ ${Object.keys(this.clientesMap).length} clientes cargados`)
+            } else {
+               // Fallback
+               const resp2 = await fetch(`${import.meta.env.VITE_API_URL}/clients/?limit=500`)
+               const data2 = await resp2.json()
+               const clientes = data2.data || (Array.isArray(data2) ? data2 : [])
+               
+               this.clientesMap = {}
+               clientes.forEach(c => { this.clientesMap[c.id] = c })
+               this.clientesMapLoaded = true
+            }
+         } catch (e) {
+            console.error('❌ Error:', e)
+         }
+      },
+
+      getNombreCliente(id) {
+      if (!id) return 'Sin cliente'
+      const client = this.clientesMap[id]
+      return client ? client.name : 'Cargando...'
+      },
+
+      getClienteDireccion(id) {
+      if (!id) return ''
+      const client = this.clientesMap[id]
+      return client ? client.address : ''
+      },
    }
 }
 </script>

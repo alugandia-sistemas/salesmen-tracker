@@ -469,26 +469,20 @@ export default {
       return `${days[now.getDay()]}, ${now.getDate()} de ${months[now.getMonth()]}`
     }
   },
-  mounted() {
+  async mounted() {
     const sellerData = localStorage.getItem('seller')
-    if (!sellerData) {
+    if (sellerData) {
+      this.seller = JSON.parse(sellerData)
+      
+      // 🔑 CRÍTICO: Cargar clientes PRIMERO
+      await this.fetchAllClients()
+      
+      this.fetchTodayRoutes()
+      this.fetchStats()
+      this.fetchClients()
+    } else {
       this.$router.push('/login')
-      return
     }
-
-    this.seller = JSON.parse(sellerData)
-    this.sellerName = this.seller.name || 'Vendedor'
-
-    // Set default date to today
-    const today = new Date().toISOString().split('T')[0]
-    this.visitForm.date = today
-
-    // Load initial data
-    this.fetchTodayRoutes()
-    this.fetchStats()
-    this.fetchClients(1)
-    this.fetchAllClients()
-    this.initGPS()
   },
   beforeUnmount() {
     if (this.geoWatcher) {
@@ -575,12 +569,22 @@ export default {
 
     async fetchAllClients() {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/?limit=500`)
-        const data = await response.json()
-        // Handle both paginated response {data: [...]} and direct array response
-        this.allClients = Array.isArray(data) ? data : (data.data || [])
+        // Usar endpoint optimizado
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/sync/`)
+        
+        if (response.ok) {
+          const data = await response.json()
+          this.allClients = data.clients || []
+        } else {
+          // Fallback
+          const resp2 = await fetch(`${import.meta.env.VITE_API_URL}/clients/?limit=500`)
+          const data2 = await resp2.json()
+          this.allClients = Array.isArray(data2) ? data2 : (data2.data || [])
+        }
+        
+        console.log(`✅ ${this.allClients.length} clientes cargados`)
       } catch (e) {
-        console.error('Error fetching all clients:', e)
+        console.error('Error:', e)
         this.allClients = []
       }
     },

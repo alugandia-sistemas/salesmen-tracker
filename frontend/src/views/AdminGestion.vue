@@ -782,19 +782,22 @@ export default {
       }
     }
   },
-  mounted() {
-    console.log('✅ AdminGestion mounted - initializing data fetch...')
+  async mounted() {
+    console.log('✅ AdminGestion mounted - iniciando carga de datos...')
+    
+    // 🔑 CRÍTICO: Cargar clientes PRIMERO y ESPERAR
+    await this.loadAllClientes()
+    
+    // Ahora sí cargar el resto
     this.fetchVendedores()
     this.fetchClientes()
     this.fetchRutas()
-    this.loadAllClientes() // Load complete client map for O(1) lookups
 
-    // Verificar si viene con tab específico desde query params
     const tab = this.$route.query.tab
     if (tab) {
       this.activeTab = tab
     }
-    
+  
     // Log current state after a brief delay to see what was loaded
     setTimeout(() => {
       console.log('📊 State after mounted:')
@@ -886,18 +889,56 @@ export default {
         window.scrollTo({ top: 0, behavior: 'smooth' })
       }
     },
+
     async loadAllClientes() {
-      // Load ALL clients into memory indexed by ID - single operation at startup
-      if (this.clientesMapLoaded) return
+      // ✅ OPTIMIZADO: Usar /clients/sync/ para carga única
+      if (this.clientesMapLoaded) {
+        console.log('✅ clientesMap ya cargado, skip')
+        return
+      }
       
       try {
-        console.log('📦 Loading all clients into memory...')
+        console.log('📦 Cargando todos los clientes con /clients/sync/...')
+        const startTime = performance.now()
+        
+        // ✅ ENDPOINT OPTIMIZADO (1 query SQL)
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/sync/`)
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+        
+        const data = await response.json()
+        const allClientes = data.clients || []
+        
+        // Crear mapa indexado para O(1) lookups
+        this.clientesMap = {}
+        allClientes.forEach(client => {
+          this.clientesMap[client.id] = client
+        })
+        
+        this.clientesMapLoaded = true
+        
+        const duration = (performance.now() - startTime).toFixed(0)
+        console.log(`✅ Cargados ${Object.keys(this.clientesMap).length} clientes en ${duration}ms`)
+        
+        return true
+      } catch (e) {
+        console.error('❌ Error cargando clientes:', e)
+        return this.loadAllClientesFallback()
+      }
+    },
+
+    async loadAllClientesFallback() {
+      try {
         const allClientes = []
         let page = 1
         let hasMore = true
         
-        while (hasMore) {
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/clients/?page=${page}&limit=100`)
+        while (hasMore && page <= 50) {
+          const response = await fetch(
+            `${import.meta.env.VITE_API_URL}/clients/?page=${page}&limit=100`
+          )
           const data = await response.json()
           
           if (Array.isArray(data)) {
@@ -907,22 +948,23 @@ export default {
             allClientes.push(...(data.data || []))
             hasMore = data.pagination?.has_next || false
           }
-          
           page++
         }
         
-        // Create indexed map for O(1) lookups
         this.clientesMap = {}
         allClientes.forEach(client => {
           this.clientesMap[client.id] = client
         })
         
         this.clientesMapLoaded = true
-        console.log(`✅ Loaded ${Object.keys(this.clientesMap).length} clients into memory`)
+        console.log(`✅ Fallback: ${Object.keys(this.clientesMap).length} clientes`)
+        return true
       } catch (e) {
-        console.error('❌ Error loading all clients:', e)
+        console.error('❌ Fallback también falló:', e)
+        return false
       }
     },
+
     async fetchRutas() {
       try {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/routes/`)
@@ -1183,9 +1225,15 @@ export default {
       return v ? v.name : 'Desconocido'
     },
     getNombreCliente(id) {
-      // O(1) lookup in indexed map
+      if (!id) return 'Sin cliente'
       const client = this.clientesMap[id]
-      return client ? client.name : 'Desconocido'
+      return client ? client.name : (this.clientesMapLoaded ? 'Desconocido' : 'Cargando...')
+    },
+
+    getClienteDireccion(id) {
+      if (!id) return 'Sin dirección'
+      const client = this.clientesMap[id]
+      return client ? client.address : 'Sin dirección'
     },
     formatDate(date) {
       return new Date(date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
