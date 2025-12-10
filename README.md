@@ -515,7 +515,7 @@ of this software...
 - 🌐 Empresa: [Alugandia SL](https://alugandia.es)
 - 📧 Email: jmgomez@alugandia.es
 - 📍 Ubicación: Real de Gandia, Valencia, España
-- 💼 LinkedIn: [Jose Manuel Gómez](https://linkedin.com/in/jose-manuel-gomez)
+- 💼 LinkedIn: [Jose Manuel Gómez](https://www.linkedin.com/in/josemangomez/)
 
 ---
 
