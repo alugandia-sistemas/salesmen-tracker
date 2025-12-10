@@ -964,224 +964,85 @@ def get_route_tracking(seller_id: str, db: Session = Depends(get_db)):
 
 @app.get("/clients/")
 def list_clients(
-    db: Session = Depends(get_db),
-    status: Optional[str] = Query(default="active", description="Filtrar: active, inactive, all"),
-    page: Optional[int] = Query(default=1, description="Página (1-based)"),
-    limit: Optional[int] = Query(default=25, description="Límite por página"),
-    search: Optional[str] = Query(default=None, description="Término de búsqueda (nombre o dirección)")
-):
-    """
-    ✅ OPTIMIZADO: Una sola query extrae coordenadas con ST_X/ST_Y
-    
-    Antes: 1.746 queries para 1.745 clientes (8-12 seg)
-    Ahora: 1 query para 1.745 clientes (200-400 ms)
-    """
-    from sqlalchemy import func
-    
-    # Query única con coordenadas extraídas directamente
-    query = db.query(
-        Client.id,
-        Client.name,
-        Client.address,
-        Client.phone,
-        Client.email,
-        Client.client_type,
-        Client.status,
-        Client.created_at,
-        # Extraer lon/lat casteando Geography → Geometry
-        func.ST_X(func.ST_GeomFromWKB(func.ST_AsBinary(Client.location))).label('longitude'),
-        func.ST_Y(func.ST_GeomFromWKB(func.ST_AsBinary(Client.location))).label('latitude')
-    )
-    
-    # Filtrar por status
-    if status and status != "all":
-        query = query.filter(Client.status == status)
-    
-    # Aplicar búsqueda si viene
-    from sqlalchemy import func, or_
-
-    if search:
-        term = f"%{search.lower()}%"
-        query = query.filter(
-            or_(
-                func.lower(Client.name).like(term),
-                func.lower(Client.address).like(term)
-            )
-        )
-
-    # Ordenar
-    query = query.order_by(Client.name)
-
-    # Contar total para paginación
-    total_query = db.query(func.count(Client.id))
-    if status and status != "all":
-        total_query = total_query.filter(Client.status == status)
-    if search:
-        total_query = total_query.filter(
-            or_(
-                func.lower(Client.name).like(term),
-                func.lower(Client.address).like(term)
-            )
-        )
-    total = total_query.scalar() or 0
-
-    # Calcular offset desde page
-    page = max(1, page or 1)
-    limit = int(limit) if limit else 25
-    offset = (page - 1) * limit
-
-    # Aplicar paginado
-    query = query.limit(limit).offset(offset)
-    clients = query.all()
-
-    # Construir payload de clientes
-    clients_list = [
-        {
-            "id": str(c.id),
-            "name": c.name,
-            "address": c.address,
-            "phone": c.phone,
-            "email": c.email,
-            "client_type": c.client_type,
-            "status": c.status,
-            "latitude": float(c.latitude) if c.latitude else None,
-            "longitude": float(c.longitude) if c.longitude else None,
-            "created_at": c.created_at.isoformat() if c.created_at else None
-        }
-        for c in clients
-    ]
-
-    # Respuesta paginada (compatible con frontend que acepta array o {data,pagination})
-    pagination = {
-        "page": page,
-        "limit": limit,
-        "total": total,
-        "total_pages": (total + limit - 1) // limit if limit else 1,
-        "has_next": (page * limit) < total,
-        "has_prev": page > 1
-    }
-
-    return {"data": clients_list, "pagination": pagination}
-
-
-# --- AÑADIR DESPUÉS: Endpoint de conteo rápido ---
-
-@app.get("/clients/count/")
-def count_clients(
-    db: Session = Depends(get_db),
-    status: Optional[str] = Query(default="active")
-):
-    """Conteo rápido sin cargar datos"""
-    from sqlalchemy import func
-    
-    query = db.query(func.count(Client.id))
-    if status and status != "all":
-        query = query.filter(Client.status == status)
-    
-    return {"count": query.scalar(), "status": status}
-
-
-# --- AÑADIR DESPUÉS: Búsqueda optimizada para autocomplete ---
-
-@app.get("/clients/search/")
-def search_clients(
-    q: str = Query(..., min_length=2, description="Término de búsqueda"),
-    db: Session = Depends(get_db),
-    limit: int = Query(default=20, le=100)
-):
-    """Búsqueda rápida por nombre/dirección (autocomplete móvil)"""
-    from sqlalchemy import func, or_
-    
-    search_term = f"%{q.lower()}%"
-    
-    clients = db.query(
-        Client.id,
-        Client.name,
-        Client.address,
-        Client.phone,
-        Client.client_type,
-        func.ST_X(func.ST_GeomFromWKB(func.ST_AsBinary(Client.location))).label('longitude'),
-        func.ST_Y(func.ST_GeomFromWKB(func.ST_AsBinary(Client.location))).label('latitude')
-    ).filter(
-        Client.status == "active",
-        or_(
-            func.lower(Client.name).like(search_term),
-            func.lower(Client.address).like(search_term)
-        )
-    ).limit(limit).all()
-    
-    return [
-        {
-            "id": str(c.id),
-            "name": c.name,
-            "address": c.address,
-            "phone": c.phone,
-            "client_type": c.client_type,
-            "latitude": float(c.latitude) if c.latitude else None,
-            "longitude": float(c.longitude) if c.longitude else None
-        }
-        for c in clients
-    ]
-
-
-# --- AÑADIR DESPUÉS: Sync incremental para caché móvil ---
-
-@app.get("/clients/sync/")
-def sync_clients(
-    updated_after: Optional[str] = Query(default=None, description="ISO datetime"),
+    page: int = Query(1, ge=1),  # Página (mínimo 1)
+    limit: int = Query(100, ge=10, le=500),  # Items por página (10-500)
+    search: Optional[str] = Query(None),  # Búsqueda: nombre o teléfono
     db: Session = Depends(get_db)
 ):
     """
-    Sync incremental para caché local en móvil
+    ✅ PAGINACIÓN + BÚSQUEDA OPTIMIZADA
     
-    Primera carga: GET /clients/sync/
-    Siguientes: GET /clients/sync/?updated_after=2025-01-15T10:30:00Z
+    Ejemplos:
+    GET /clients/?page=1&limit=100
+    GET /clients/?page=2&limit=50&search=cerraj
+    GET /clients/?search=600123456
     """
-    from sqlalchemy import func
-    from datetime import datetime
+    from sqlalchemy import func, or_
     
-    query = db.query(
-        Client.id,
-        Client.name,
-        Client.address,
-        Client.phone,
-        Client.email,
-        Client.client_type,
-        Client.status,
-        Client.created_at,
-        func.ST_X(func.ST_GeomFromWKB(func.ST_AsBinary(Client.location))).label('longitude'),
-        func.ST_Y(func.ST_GeomFromWKB(func.ST_AsBinary(Client.location))).label('latitude')
-    )
+    # Construir query base
+    query = db.query(Client).filter(Client.status == "active")
     
-    if updated_after:
+    # 🔍 BÚSQUEDA: nombre o teléfono
+    if search and len(search.strip()) > 0:
+        search_term = f"%{search.strip().lower()}%"
+        query = query.filter(
+            or_(
+                func.lower(Client.name).like(search_term),
+                Client.phone.like(search_term),
+                Client.email.like(search_term)
+            )
+        )
+    
+    # Contar total de resultados (para paginación)
+    total_count = query.count()
+    
+    # Calcular offset
+    offset = (page - 1) * limit
+    total_pages = (total_count + limit - 1) // limit  # Redondeo hacia arriba
+    
+    # ✅ PAGINATION: traer solo los items necesarios
+    clients_db = query.order_by(Client.name).offset(offset).limit(limit).all()
+    
+    # Convertir Geography a lat/lng
+    result = []
+    for client in clients_db:
         try:
-            last_sync = datetime.fromisoformat(updated_after.replace('Z', '+00:00'))
-            query = query.filter(Client.created_at > last_sync)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Formato fecha inválido. Usar ISO 8601")
+            from sqlalchemy import func as sqlfunc
+            coords_wkt = db.query(sqlfunc.ST_AsText(client.location)).scalar()
+            
+            if coords_wkt and coords_wkt.startswith("POINT"):
+                coords_str = coords_wkt.replace("POINT(", "").replace(")", "")
+                lng, lat = map(float, coords_str.split())
+            else:
+                lng, lat = None, None
+            
+            result.append({
+                "id": str(client.id),
+                "name": client.name,
+                "address": client.address,
+                "phone": client.phone,
+                "email": client.email,
+                "client_type": client.client_type,
+                "status": client.status,
+                "latitude": lat,
+                "longitude": lng,
+                "created_at": client.created_at.isoformat() if client.created_at else None
+            })
+        except Exception as e:
+            print(f"⚠️ Error procesando cliente {client.id}: {str(e)}")
+            continue
     
-    clients = query.order_by(Client.name).all()
-    total_count = db.query(func.count(Client.id)).filter(Client.status == "active").scalar()
-    
+    # 📊 RESPUESTA CON METADATOS DE PAGINACIÓN
     return {
-        "clients": [
-            {
-                "id": str(c.id),
-                "name": c.name,
-                "address": c.address,
-                "phone": c.phone,
-                "email": c.email,
-                "client_type": c.client_type,
-                "status": c.status,
-                "latitude": float(c.latitude) if c.latitude else None,
-                "longitude": float(c.longitude) if c.longitude else None,
-                "created_at": c.created_at.isoformat() if c.created_at else None
-            }
-            for c in clients
-        ],
-        "sync_timestamp": datetime.utcnow().isoformat() + "Z",
-        "total_count": total_count,
-        "synced_count": len(clients)
+        "data": result,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total_count,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1
+        }
     }
 
 
