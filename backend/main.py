@@ -10,17 +10,15 @@
 # - schemas/: Schemas Pydantic
 # - routers/: Endpoints FastAPI
 # - utils/: Utilidades (geo, validators)
-#
-# Antes: 3000+ líneas en un solo archivo
-# Ahora: ~50 líneas aquí, resto en módulos
 # ==============================================================================
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import settings, get_cors_origins
-from .database import init_db
-from .routers import (
+# Imports ABSOLUTOS (sin punto)
+from config import settings, get_cors_origins
+from database import init_db
+from routers import (
     clients_router,
     sellers_router,
     routes_router,

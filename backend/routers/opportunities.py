@@ -9,12 +9,24 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from pydantic import BaseModel
 
-from ..database import get_db
-from ..models import Opportunity, Client
-from ..schemas.opportunity import OpportunityCreate, OpportunityUpdate
+from database import get_db
+from models import Opportunity, Client
 
 router = APIRouter(prefix="/opportunities", tags=["opportunities"])
+
+
+class OpportunityCreate(BaseModel):
+    seller_id: str
+    client_id: str
+    title: str
+    description: str = None
+    estimated_value: float = 0.0
+    probability: float = 0.5
+    expected_close_date: datetime = None
+    next_action: str = None
+    next_action_date: datetime = None
 
 
 @router.get("/")
@@ -25,20 +37,12 @@ def list_opportunities(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100)
 ):
-    """Listar oportunidades con filtros"""
     query = db.query(Opportunity)
     
     if seller_id:
-        try:
-            seller_uuid = uuid.UUID(seller_id)
-            query = query.filter(Opportunity.seller_id == seller_uuid)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="seller_id inválido")
-    
+        query = query.filter(Opportunity.seller_id == uuid.UUID(seller_id))
     if status:
         query = query.filter(Opportunity.status == status)
-    
-    # Excluir cerradas por defecto
     if not status:
         query = query.filter(Opportunity.status.notin_(['won', 'lost']))
     
@@ -60,40 +64,21 @@ def list_opportunities(
             "status": opp.status,
             "expected_close_date": opp.expected_close_date.isoformat() if opp.expected_close_date else None,
             "next_action": opp.next_action,
-            "next_action_date": opp.next_action_date.isoformat() if opp.next_action_date else None,
             "client_name": client.name if client else None,
             "created_at": opp.created_at.isoformat() if opp.created_at else None
         })
     
-    return {
-        "data": result,
-        "pagination": {
-            "page": page,
-            "limit": limit,
-            "total": total,
-            "total_pages": (total + limit - 1) // limit
-        }
-    }
+    return {"data": result, "pagination": {"page": page, "limit": limit, "total": total}}
 
 
 @router.get("/pipeline")
-def get_pipeline_summary(
-    db: Session = Depends(get_db),
-    seller_id: Optional[str] = Query(None)
-):
-    """Resumen del pipeline de ventas"""
+def get_pipeline_summary(db: Session = Depends(get_db), seller_id: Optional[str] = Query(None)):
     query = db.query(Opportunity).filter(Opportunity.status.notin_(['lost']))
-    
     if seller_id:
-        try:
-            seller_uuid = uuid.UUID(seller_id)
-            query = query.filter(Opportunity.seller_id == seller_uuid)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="seller_id inválido")
+        query = query.filter(Opportunity.seller_id == uuid.UUID(seller_id))
     
     opportunities = query.all()
     
-    # Calcular totales por status
     by_status = {}
     total_value = 0
     weighted_value = 0
@@ -107,7 +92,6 @@ def get_pipeline_summary(
         total_value += opp.estimated_value
         weighted_value += opp.weighted_value
     
-    # Calcular conversión
     total_won = len([o for o in opportunities if o.status == 'won'])
     total_closed = total_won + len([o for o in opportunities if o.status == 'lost'])
     conversion_rate = (total_won / total_closed * 100) if total_closed > 0 else 0
@@ -121,39 +105,11 @@ def get_pipeline_summary(
     }
 
 
-@router.get("/{opportunity_id}")
-def get_opportunity(opportunity_id: str, db: Session = Depends(get_db)):
-    """Obtener oportunidad por ID"""
-    try:
-        opp_uuid = uuid.UUID(opportunity_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="opportunity_id inválido")
-    
-    opp = db.query(Opportunity).filter(Opportunity.id == opp_uuid).first()
-    if not opp:
-        raise HTTPException(status_code=404, detail="Oportunidad no encontrada")
-    
-    client = db.query(Client).filter(Client.id == opp.client_id).first()
-    
-    return {
-        **opp.to_dict(),
-        "client_name": client.name if client else None,
-        "client_address": client.address if client else None
-    }
-
-
 @router.post("/")
 def create_opportunity(opp_data: OpportunityCreate, db: Session = Depends(get_db)):
-    """Crear nueva oportunidad"""
-    try:
-        seller_uuid = uuid.UUID(opp_data.seller_id)
-        client_uuid = uuid.UUID(opp_data.client_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="IDs inválidos")
-    
     new_opp = Opportunity(
-        seller_id=seller_uuid,
-        client_id=client_uuid,
+        seller_id=uuid.UUID(opp_data.seller_id),
+        client_id=uuid.UUID(opp_data.client_id),
         title=opp_data.title,
         description=opp_data.description,
         estimated_value=opp_data.estimated_value,
@@ -167,56 +123,4 @@ def create_opportunity(opp_data: OpportunityCreate, db: Session = Depends(get_db
     db.commit()
     db.refresh(new_opp)
     
-    return {
-        "id": str(new_opp.id),
-        "title": new_opp.title,
-        "message": "Oportunidad creada correctamente"
-    }
-
-
-@router.put("/{opportunity_id}")
-def update_opportunity(
-    opportunity_id: str,
-    opp_data: OpportunityUpdate,
-    db: Session = Depends(get_db)
-):
-    """Actualizar oportunidad"""
-    try:
-        opp_uuid = uuid.UUID(opportunity_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="opportunity_id inválido")
-    
-    opp = db.query(Opportunity).filter(Opportunity.id == opp_uuid).first()
-    if not opp:
-        raise HTTPException(status_code=404, detail="Oportunidad no encontrada")
-    
-    update_data = opp_data.model_dump(exclude_unset=True)
-    
-    # Si se cierra (won/lost), registrar fecha
-    if opp_data.status in ['won', 'lost']:
-        opp.actual_close_date = datetime.utcnow()
-    
-    for field, value in update_data.items():
-        setattr(opp, field, value)
-    
-    db.commit()
-    
-    return {"message": "Oportunidad actualizada", "id": str(opp.id)}
-
-
-@router.delete("/{opportunity_id}")
-def delete_opportunity(opportunity_id: str, db: Session = Depends(get_db)):
-    """Eliminar oportunidad"""
-    try:
-        opp_uuid = uuid.UUID(opportunity_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="opportunity_id inválido")
-    
-    opp = db.query(Opportunity).filter(Opportunity.id == opp_uuid).first()
-    if not opp:
-        raise HTTPException(status_code=404, detail="Oportunidad no encontrada")
-    
-    db.delete(opp)
-    db.commit()
-    
-    return {"message": "Oportunidad eliminada", "id": opportunity_id}
+    return {"id": str(new_opp.id), "title": new_opp.title, "message": "Oportunidad creada"}

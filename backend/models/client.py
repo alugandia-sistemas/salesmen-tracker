@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from geoalchemy2 import Geography
 
-from ..database import Base
+from database import Base
 
 
 class Client(Base):

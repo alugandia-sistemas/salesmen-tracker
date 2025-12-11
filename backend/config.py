@@ -1,52 +1,44 @@
 # ==============================================================================
 # CONFIG.PY - Configuración centralizada
 # ==============================================================================
-# Salesmen Tracker - Alugandia
-# Refactorizado: Diciembre 2025
-# ==============================================================================
 
 import os
 from functools import lru_cache
-from pydantic_settings import BaseSettings
 from typing import List
 
 
-class Settings(BaseSettings):
-    """
-    Configuración de la aplicación.
-    Las variables se cargan desde .env o variables de entorno.
-    """
+class Settings:
+    """Configuración de la aplicación"""
     
     # Database
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/salesmen_tracker"
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL", 
+        "postgresql://postgres:postgres@localhost:5432/salesmen_tracker"
+    )
     
     # CORS
-    CORS_ORIGINS: str = "http://localhost:5173,https://tracker.alugandia.com"
+    CORS_ORIGINS: str = os.getenv(
+        "CORS_ORIGINS", 
+        "http://localhost:5173,https://tracker.alugandia.com"
+    )
     
     # App
     APP_NAME: str = "Salesmen Tracker - Alugandia"
-    DEBUG: bool = False
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # GPS Validation
-    GPS_MAX_DISTANCE_METERS: int = 100  # Distancia máxima para check-in válido
-    GPS_BUSINESS_HOUR_START: int = 7   # Hora inicio jornada
-    GPS_BUSINESS_HOUR_END: int = 19     # Hora fin jornada
+    GPS_MAX_DISTANCE_METERS: int = int(os.getenv("GPS_MAX_DISTANCE_METERS", "100"))
+    GPS_BUSINESS_HOUR_START: int = int(os.getenv("GPS_BUSINESS_HOUR_START", "7"))
+    GPS_BUSINESS_HOUR_END: int = int(os.getenv("GPS_BUSINESS_HOUR_END", "21"))
     
     # Pagination defaults
     DEFAULT_PAGE_SIZE: int = 25
     MAX_PAGE_SIZE: int = 500
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
 
 @lru_cache()
 def get_settings() -> Settings:
-    """
-    Singleton para settings.
-    Usa @lru_cache para evitar leer .env en cada request.
-    """
+    """Singleton para settings"""
     return Settings()
 
 

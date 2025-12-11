@@ -9,7 +9,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
 
-from .config import settings
+# Import ABSOLUTO
+from config import settings
 
 # ==============================================================================
 # ENGINE CONFIGURATION
@@ -113,6 +114,9 @@ def init_db():
     - Crea extensión PostGIS
     - Crea todas las tablas
     """
+    # Importar modelos para que SQLAlchemy los conozca
+    from models import Client, Seller, Route, Visit, Zone, Opportunity
+    
     ensure_postgis()
     Base.metadata.create_all(bind=engine)
     print("✅ Base de datos inicializada")

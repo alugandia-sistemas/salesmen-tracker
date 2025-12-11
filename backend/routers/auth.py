@@ -3,25 +3,31 @@
 # ==============================================================================
 
 from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, EmailStr
 
-from ..database import get_db
-from ..models import Seller
-from ..schemas.seller import SellerLogin, SellerLoginResponse, SellerCreate
+from database import get_db
+from models import Seller
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    phone: str = None
+    is_admin: bool = False
+
+
 @router.post("/login")
-def login(credentials: SellerLogin, db: Session = Depends(get_db)):
-    """
-    Login de vendedor.
-    
-    Retorna datos del vendedor si las credenciales son correctas.
-    El frontend almacena estos datos en localStorage.
-    """
+def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     seller = db.query(Seller).filter(Seller.email == credentials.email).first()
     
     if not seller:
@@ -33,7 +39,6 @@ def login(credentials: SellerLogin, db: Session = Depends(get_db)):
     if not seller.verify_password(credentials.password):
         raise HTTPException(status_code=401, detail="Contraseña incorrecta")
     
-    # Actualizar último login
     seller.last_login = datetime.utcnow()
     db.commit()
     
@@ -52,18 +57,11 @@ def login(credentials: SellerLogin, db: Session = Depends(get_db)):
 
 
 @router.post("/register")
-def register(seller_data: SellerCreate, db: Session = Depends(get_db)):
-    """
-    Registro de nuevo vendedor.
-    
-    Solo para uso administrativo - el registro público está deshabilitado.
-    """
-    # Verificar email único
+def register(seller_data: RegisterRequest, db: Session = Depends(get_db)):
     existing = db.query(Seller).filter(Seller.email == seller_data.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email ya registrado")
     
-    # Crear nuevo vendedor
     new_seller = Seller(
         name=seller_data.name,
         email=seller_data.email,
@@ -78,37 +76,6 @@ def register(seller_data: SellerCreate, db: Session = Depends(get_db)):
     
     return {
         "success": True,
-        "message": f"Usuario {new_seller.name} creado correctamente. Ya puedes iniciar sesión.",
+        "message": f"Usuario {new_seller.name} creado correctamente.",
         "seller_id": str(new_seller.id)
     }
-
-
-@router.post("/change-password")
-def change_password(
-    seller_id: str,
-    current_password: str,
-    new_password: str,
-    db: Session = Depends(get_db)
-):
-    """Cambiar contraseña del vendedor"""
-    import uuid
-    
-    try:
-        seller_uuid = uuid.UUID(seller_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="ID de vendedor inválido")
-    
-    seller = db.query(Seller).filter(Seller.id == seller_uuid).first()
-    if not seller:
-        raise HTTPException(status_code=404, detail="Vendedor no encontrado")
-    
-    if not seller.verify_password(current_password):
-        raise HTTPException(status_code=401, detail="Contraseña actual incorrecta")
-    
-    if len(new_password) < 6:
-        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 6 caracteres")
-    
-    seller.password_hash = Seller.hash_password(new_password)
-    db.commit()
-    
-    return {"success": True, "message": "Contraseña actualizada correctamente"}

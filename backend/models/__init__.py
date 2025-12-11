@@ -2,12 +2,12 @@
 # MODELS - Exportación centralizada de modelos SQLAlchemy
 # ==============================================================================
 
-from .client import Client
-from .seller import Seller
-from .route import Route
-from .visit import Visit
-from .zone import Zone
-from .opportunity import Opportunity
+from models.client import Client
+from models.seller import Seller
+from models.route import Route
+from models.visit import Visit
+from models.zone import Zone
+from models.opportunity import Opportunity
 
 __all__ = [
     "Client",
