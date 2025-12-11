@@ -602,7 +602,17 @@ export default {
                })
             })
 
+            console.log('Check-in response status:', response.status)
+            
+            if (!response.ok) {
+               const error = await response.json()
+               console.error('Check-in error response:', error)
+               throw new Error(`Server error (${response.status}): ${error.detail || 'Unknown error'}`)
+            }
+
             this.resultadoCheckin = await response.json()
+            console.log('✅ Check-in successful:', this.resultadoCheckin)
+            
             // Clean up GPS before closing modal
             if (this.geoWatcher !== null) {
                navigator.geolocation.clearWatch(this.geoWatcher)
@@ -613,7 +623,7 @@ export default {
             this.fetchVisitas()
          } catch (e) {
             console.error('Error en check-in:', e)
-            alert('Error al hacer check-in')
+            alert(`Error al hacer check-in: ${e.message}`)
          } finally {
             this.cargandoCheckin = false
          }

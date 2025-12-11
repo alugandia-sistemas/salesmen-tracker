@@ -1523,6 +1523,9 @@ def create_route(
             "message": "Ruta creada correctamente"
         }
     except Exception as e:
+        import traceback
+        print(f"[ROUTE CREATE] ❌ Error: {str(e)}")
+        traceback.print_exc()
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error al crear ruta: {str(e)}")
 
@@ -2595,9 +2598,7 @@ def get_seller_summary(
 
 @app.post("/visits/checkin/", response_model=CheckInResponse)
 async def checkin(
-    request: Optional[CheckInRequest] = Body(None),
-    request_form: Optional[str] = Form(None),
-    photo: Optional[UploadFile] = File(None),
+    request: CheckInRequest,
     db: Session = Depends(get_db)
 ):
     """
@@ -2614,16 +2615,10 @@ async def checkin(
     from sqlalchemy import func
     
     try:
-        # Support both application/json body (`request`) and multipart form field (`request_form`)
+        # Support both application/json body and multipart form field
         import json
-        if request is None:
-            if not request_form:
-                raise HTTPException(status_code=400, detail="Request body required")
-            try:
-                payload = json.loads(request_form)
-                request = CheckInRequest.model_validate(payload)
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Invalid request payload: {str(e)}")
+        
+        print(f"[CHECK-IN] ✅ Request received: route_id={request.route_id}, seller_id={request.seller_id}, client_id={request.client_id}")
 
         # Validar que IDs sean UUIDs válidos
         try:
@@ -2631,6 +2626,7 @@ async def checkin(
             seller_id = uuid.UUID(request.seller_id)
             client_id = uuid.UUID(request.client_id)
         except ValueError as e:
+            print(f"[CHECK-IN] ❌ Invalid UUID: {str(e)}")
             raise HTTPException(status_code=400, detail=f"IDs inválidos: {str(e)}")
         
         # Obtener cliente para extraer su ubicación
@@ -2669,24 +2665,11 @@ async def checkin(
             client_id=client_id
         )
         
-        # 📸 GUARDAR FOTO GEOETIQUETADA (si aplica)
+        # 📸 GUARDAR FOTO GEOETIQUETADA (opcional - se puede agregar en endpoint separado)
         photo_url = None
-        if photo:
-            # Crear directorio de fotos
-            photo_dir = Path("./uploads/visits")
-            photo_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Guardar con nombre único
-            visit_id = str(uuid.uuid4())
-            photo_path = photo_dir / f"{visit_id}_{photo.filename}"
-            
-            with open(photo_path, "wb") as f:
-                contents = await photo.read()
-                f.write(contents)
-            
-            photo_url = f"/uploads/visits/{visit_id}_{photo.filename}"
         
         # 💾 GUARDAR REGISTRO DE VISITA
+        print(f"[CHECK-IN] 💾 Creating Visit record...")
         visit = Visit(
             route_id=route_id,
             seller_id=seller_id,
@@ -2703,12 +2686,17 @@ async def checkin(
             notes=request.notes
         )
         
+        print(f"[CHECK-IN] 💾 Adding visit to session...")
         db.add(visit)
+        print(f"[CHECK-IN] 💾 Committing transaction...")
         db.commit()
+        print(f"[CHECK-IN] 💾 Refreshing visit record...")
         db.refresh(visit)
+        print(f"[CHECK-IN] ✅ Visit saved successfully! ID={visit.id}")
         
         # 📊 GENERAR RESPUESTA
         message = "✅ Check-in exitoso" if is_valid else f"⚠️ Check-in con advertencias: {error_message}"
+        print(f"[CHECK-IN] 📊 Response: {message}")
         
         return CheckInResponse(
             visit_id=str(visit.id),
@@ -2721,6 +2709,9 @@ async def checkin(
         )
     
     except Exception as e:
+        print(f"[CHECK-IN] ❌ Exception: {str(e)}")
+        import traceback
+        traceback.print_exc()
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error en check-in: {str(e)}")
 

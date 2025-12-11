@@ -9,7 +9,7 @@ import AdminInvitaciones from '../views/AdminInvitaciones.vue'
 import DirectorioClientes from '../views/DirectorioClientes.vue'
 import MyRoute from '../views/MyRoute.vue'
 import AdminZones from '../views/AdminZones.vue'
-import ComercialDashboard from '../views/Comercial.vue'
+// import ComercialDashboard from '../views/Comercial.vue'
 
 const routes = [
   // Auth

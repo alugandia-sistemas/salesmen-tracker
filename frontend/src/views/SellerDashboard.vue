@@ -811,7 +811,16 @@ export default {
           })
         })
 
+        console.log('Check-in response status:', response.status)
+        
+        if (!response.ok) {
+          const error = await response.json()
+          console.error('Check-in error response:', error)
+          throw new Error(`Server error (${response.status}): ${error.detail || 'Unknown error'}`)
+        }
+
         const result = await response.json()
+        console.log('✅ Check-in successful:', result)
         this.closeCheckinModal()
 
         if (result.is_valid) {
@@ -823,7 +832,7 @@ export default {
         this.fetchTodayRoutes()
       } catch (e) {
         console.error('Error during check-in:', e)
-        alert('Error durante el check-in')
+        alert(`Error durante el check-in: ${e.message}`)
       } finally {
         this.performingCheckin = false
       }
