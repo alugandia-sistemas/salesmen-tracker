@@ -162,7 +162,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'success'])
 
-const API_URL = 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 // ============================================================================
 // ESTADO REACTIVO
@@ -244,13 +244,24 @@ const captureLocation = () => {
       loadingLocation.value = false
     },
     (error) => {
-      console.error('Error de geolocalización:', error)
-      locationError.value = error.message || 'Error desconocido al obtener ubicación'
+      console.error('❌ Error de geolocalización:', error.code, error.message)
+      
+      // Mensajes más específicos según el tipo de error
+      let errorMessage = error.message || 'Error desconocido'
+      if (error.code === error.PERMISSION_DENIED) {
+        errorMessage = 'Permiso de ubicación denegado. Por favor, activa GPS en tu dispositivo.'
+      } else if (error.code === error.POSITION_UNAVAILABLE) {
+        errorMessage = 'GPS no disponible. Asegúrate de tener señal y GPS activado.'
+      } else if (error.code === error.TIMEOUT) {
+        errorMessage = 'Timeout al obtener GPS. Intenta en un lugar con mejor cobertura.'
+      }
+      
+      locationError.value = errorMessage
       loadingLocation.value = false
     },
     {
       enableHighAccuracy: true,
-      timeout: 10000,
+      timeout: 30000,  // Increased from 10s to 30s for mobile
       maximumAge: 0
     }
   )
@@ -272,6 +283,9 @@ const submitCheckin = async () => {
       notes: notes.value
     }
 
+    console.log('📤 Enviando check-in a:', `${API_URL}/visits/checkin/`)
+    console.log('📦 Payload:', payload)
+
     const response = await fetch(`${API_URL}/visits/checkin/`, {
       method: 'POST',
       headers: {
@@ -280,7 +294,9 @@ const submitCheckin = async () => {
       body: JSON.stringify(payload)
     })
 
+    console.log('📥 Response status:', response.status, response.statusText)
     const data = await response.json()
+    console.log('📥 Response data:', data)
     
     if (response.ok) {
       result.value = {
@@ -298,10 +314,10 @@ const submitCheckin = async () => {
       }
     }
   } catch (error) {
-    console.error('Error:', error)
+    console.error('❌ Error en submitCheckin:', error)
     result.value = {
       success: false,
-      message: '❌ Error en comunicación con servidor'
+      message: `❌ Error en comunicación: ${error.message}`
     }
   } finally {
     submitting.value = false
