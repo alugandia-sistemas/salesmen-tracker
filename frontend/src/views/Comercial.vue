@@ -290,9 +290,12 @@ export default {
         return
       }
       
+      console.log('🔍 Starting GPS initialization (Comercial)...')
+      
       // Obtener ubicación inicial
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          console.log('✅ GPS location obtained:', position.coords)
           this.ubicacionActual = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -300,14 +303,30 @@ export default {
           }
         },
         (error) => {
-          console.error('GPS error:', error.message)
+          console.error('❌ GPS error:', error.code, error.message)
+          let message = 'Error de ubicación: '
+          switch(error.code) {
+            case error.PERMISSION_DENIED:
+              message += 'Permiso de ubicación denegado. Habilita los permisos de geolocalización en tu navegador.'
+              break
+            case error.POSITION_UNAVAILABLE:
+              message += 'Información de posición no disponible.'
+              break
+            case error.TIMEOUT:
+              message += 'La solicitud de ubicación tardó demasiado.'
+              break
+            default:
+              message += error.message
+          }
+          console.warn(message)
         },
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       )
       
       // Monitorear cambios de ubicación
       this.geoWatcher = navigator.geolocation.watchPosition(
         (position) => {
+          console.log('📍 GPS watch update:', position.coords)
           this.ubicacionActual = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -315,9 +334,9 @@ export default {
           }
         },
         (error) => {
-          console.error('GPS watch error:', error.message)
+          console.error('❌ GPS watch error:', error.code, error.message)
         },
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       )
     },
     

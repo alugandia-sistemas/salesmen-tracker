@@ -705,31 +705,61 @@ export default {
     // Check-in
     initGPS() {
       if (!navigator.geolocation) {
+        alert('Geolocalización no disponible en este navegador')
         return
       }
 
+      console.log('🔍 Starting GPS initialization...')
+
+      // First, get the current position immediately
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          console.log('✅ GPS location obtained:', position.coords)
           this.currentLocation = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             accuracy: position.coords.accuracy
           }
         },
-        (error) => console.error('GPS error:', error.message),
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        (error) => {
+          console.error('❌ GPS error:', error.code, error.message)
+          let message = 'Error de ubicación: '
+          switch(error.code) {
+            case error.PERMISSION_DENIED:
+              message += 'Permiso de ubicación denegado. Habilita los permisos de geolocalización en tu navegador.'
+              break
+            case error.POSITION_UNAVAILABLE:
+              message += 'Información de posición no disponible.'
+              break
+            case error.TIMEOUT:
+              message += 'La solicitud de ubicación tardó demasiado.'
+              break
+            default:
+              message += error.message
+          }
+          console.warn(message)
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       )
 
+      // Then watch for continuous updates
+      if (this.geoWatcher !== null) {
+        navigator.geolocation.clearWatch(this.geoWatcher)
+      }
+      
       this.geoWatcher = navigator.geolocation.watchPosition(
         (position) => {
+          console.log('📍 GPS watch update:', position.coords)
           this.currentLocation = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             accuracy: position.coords.accuracy
           }
         },
-        (error) => console.error('GPS watch error:', error.message),
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        (error) => {
+          console.error('❌ GPS watch error:', error.code, error.message)
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       )
     },
 
@@ -737,7 +767,12 @@ export default {
       this.currentRoute = route
       this.clientFound = false
       this.checkinNotes = ''
+      this.currentLocation = null
       this.showCheckinModal = true
+      // Start GPS when modal opens
+      this.$nextTick(() => {
+        this.initGPS()
+      })
     },
 
     closeCheckinModal() {
@@ -745,6 +780,12 @@ export default {
       this.currentRoute = null
       this.clientFound = false
       this.checkinNotes = ''
+      this.currentLocation = null
+      // Stop GPS watch when modal closes
+      if (this.geoWatcher !== null) {
+        navigator.geolocation.clearWatch(this.geoWatcher)
+        this.geoWatcher = null
+      }
     },
 
     async performCheckin() {
