@@ -29,8 +29,8 @@ class Settings(BaseSettings):
     
     # GPS Validation
     GPS_MAX_DISTANCE_METERS: int = 100  # Distancia máxima para check-in válido
-    GPS_BUSINESS_HOUR_START: int = 7    # Hora inicio jornada
-    GPS_BUSINESS_HOUR_END: int = 21     # Hora fin jornada
+    GPS_BUSINESS_HOUR_START: int = 7   # Hora inicio jornada
+    GPS_BUSINESS_HOUR_END: int = 19     # Hora fin jornada
     
     # Pagination defaults
     DEFAULT_PAGE_SIZE: int = 25
