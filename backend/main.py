@@ -2709,10 +2709,12 @@ async def checkin(
         )
     
     except Exception as e:
-        print(f"[CHECK-IN] ❌ Exception: {str(e)}")
         import traceback
-        traceback.print_exc()
         db.rollback()
+        # Log full traceback for debugging locally
+        print("Check-in exception:")
+        traceback.print_exc()
+        print("Exception repr:", repr(e))
         raise HTTPException(status_code=500, detail=f"Error en check-in: {str(e)}")
 
 

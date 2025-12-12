@@ -533,7 +533,7 @@ of this software...
 
 Para preguntas o issues:
 - 📧 Email: info@alugandia.es
-- 🐛 Issues: [GitHub Issues](https://github.com/tu-usuario/salesmen-tracker/issues)
+- 🐛 Issues: [GitHub Issues](https://github.com/alugandia-sistemas/salesmen-tracker/issues)
 - 📖 Docs: [Documentación completa](docs/)
 
 ---
