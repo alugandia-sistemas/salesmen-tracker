@@ -527,33 +527,8 @@ export default {
                }
             },
             (error) => {
-               console.error('❌ GPS error:', error.code, error.message)
-               let message = 'Error de ubicación: '
-               switch(error.code) {
-                  case error.PERMISSION_DENIED:
-                     message += 'Permiso de ubicación denegado. Habilita los permisos de geolocalización en tu navegador.'
-                     break
-                  case error.POSITION_UNAVAILABLE:
-                     message += 'Información de posición no disponible.'
-                     break
-                  case error.TIMEOUT:
-                     message += 'La solicitud de ubicación tardó demasiado.'
-                     break
-                  default:
-                     message += error.message
-               }
-               console.warn(message)
-            },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-         )
-
-         if (this.geoWatcher !== null) {
-            navigator.geolocation.clearWatch(this.geoWatcher)
-         }
-
-         this.geoWatcher = navigator.geolocation.watchPosition(
+               console.error('❌ G         navigator.geolocation.getCurrentPosition(
             (position) => {
-               console.log('📍 GPS watch update:', position.coords)
                this.ubicacionActual = {
                   latitude: position.coords.latitude,
                   longitude: position.coords.longitude,
@@ -561,9 +536,23 @@ export default {
                }
             },
             (error) => {
-               console.error('❌ GPS watch error:', error.code, error.message)
+               console.error('GPS error:', error.message)
             },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+         )
+
+         this.geoWatcher = navigator.geolocation.watchPosition(
+            (position) => {
+               this.ubicacionActual = {
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude,
+                  accuracy: position.coords.accuracy
+               }
+            },
+            (error) => {
+               console.error('GPS watch error:', error.message)
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
          )
       },
 
@@ -571,12 +560,7 @@ export default {
          this.rutaActual = ruta
          this.clienteEncontrado = false
          this.notasCheckin = ''
-         this.ubicacionActual = null
          this.showCheckinModal = true
-         // Start GPS when modal opens
-         this.$nextTick(() => {
-            this.iniciarGPS()
-         })
       },
 
       async hacerCheckin() {
@@ -602,28 +586,13 @@ export default {
                })
             })
 
-            console.log('Check-in response status:', response.status)
-            
-            if (!response.ok) {
-               const error = await response.json()
-               console.error('Check-in error response:', error)
-               throw new Error(`Server error (${response.status}): ${error.detail || 'Unknown error'}`)
-            }
-
             this.resultadoCheckin = await response.json()
-            console.log('✅ Check-in successful:', this.resultadoCheckin)
-            
-            // Clean up GPS before closing modal
-            if (this.geoWatcher !== null) {
-               navigator.geolocation.clearWatch(this.geoWatcher)
-               this.geoWatcher = null
-            }
             this.showCheckinModal = false
             this.showResultado = true
             this.fetchVisitas()
          } catch (e) {
             console.error('Error en check-in:', e)
-            alert(`Error al hacer check-in: ${e.message}`)
+            alert('Error al hacer check-in')
          } finally {
             this.cargandoCheckin = false
          }
@@ -634,47 +603,7 @@ export default {
          this.rutaActual = null
          this.clienteEncontrado = false
          this.notasCheckin = ''
-         this.ubicacionActual = null
-         // Stop GPS watch when modal closes
-         if (this.geoWatcher !== null) {
-            navigator.geolocation.clearWatch(this.geoWatcher)
-            this.geoWatcher = null
-         }
-      },
-
-      cerrarResultado() {
-         this.showResultado = false
-         this.resultadoCheckin = null
-      },
-
-      getNombreCliente(id) {
-         const c = this.clientesFiltrados.find(x => x.id === id)
-         return c ? c.name : 'Desconocido'
-      },
-
-      getClienteDireccion(id) {
-         const c = this.clientesFiltrados.find(x => x.id === id)
-         return c ? c.address : 'Sin dirección'
-      },
-
-      formatDate(date) {
-         return new Date(date).toLocaleDateString('es-ES', {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-         })
-      },
-
-      verVisita(rutaId) {
-         // TODO: Ver detalles de visita
-      },
-
-      logout() {
-         localStorage.removeItem('token')
-         this.$router.push('/login')
-      },
-      async loadAllClientes() {
+AllClientes() {
          if (this.clientesMapLoaded) return
          
          try {
