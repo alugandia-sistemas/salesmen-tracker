@@ -82,82 +82,6 @@
           class="w-full mt-4 bg-white border-2 border-gray-300 text-gray-900 py-3 rounded-lg font-semibold hover:bg-gray-50 transition flex items-center justify-center gap-2">
           <span class="text-xl">+</span> Agregar Visita No Planificada
         </button>
-
-        <!-- 📅 ACCORDION - RUTAS DE LA SEMANA -->
-        <div class="mt-8">
-          <h3 class="text-lg font-bold text-gray-900 mb-4">📅 Rutas de la Semana</h3>
-
-          <!-- Week Navigation -->
-          <div class="flex gap-2 mb-4">
-            <button @click="previousWeek"
-              class="flex-1 bg-gray-900 text-white py-2 rounded-lg font-semibold text-sm hover:bg-gray-800 transition">
-              ← Anterior
-            </button>
-            <div class="flex-1 bg-gray-50 border-2 border-gray-200 rounded-lg p-3 text-center">
-              <p class="font-semibold text-gray-900 text-sm">
-                {{ weekStartDate ? weekStartDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : '' }}
-                -
-                {{ weekEndDate ? weekEndDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : '' }}
-              </p>
-            </div>
-            <button @click="nextWeek"
-              class="flex-1 bg-gray-900 text-white py-2 rounded-lg font-semibold text-sm hover:bg-gray-800 transition">
-              Siguiente →
-            </button>
-          </div>
-
-          <!-- Days Accordion -->
-          <div v-if="loadingWeekRoutes" class="text-center py-8">
-            <p class="text-gray-600 text-sm">⏳ Cargando rutas...</p>
-          </div>
-
-          <div v-else class="space-y-2">
-            <div v-for="(dayData, dayIndex) in weekDays" :key="dayIndex"
-              class="bg-gray-50 border-2 border-gray-200 rounded-xl overflow-hidden">
-              <!-- Day Header -->
-              <button @click="toggleDay(dayIndex)"
-                class="w-full px-4 py-3 flex justify-between items-center hover:bg-gray-100 transition">
-                <div class="flex items-center gap-2 flex-1 text-left">
-                  <span class="text-lg">{{ dayData.emoji }}</span>
-                  <div>
-                    <h4 class="font-bold text-gray-900 text-sm">{{ dayData.dayName }}</h4>
-                    <p class="text-xs text-gray-600">
-                      {{ dayData.date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) }}
-                      • {{ dayData.routes.length }} ruta{{ dayData.routes.length !== 1 ? 's' : '' }}
-                    </p>
-                  </div>
-                </div>
-                <span :class="['text-gray-600 transition', { 'rotate-180': expandedWeekDays[dayIndex] }]">▼</span>
-              </button>
-
-              <!-- Day Content -->
-              <div v-if="expandedWeekDays[dayIndex]"
-                class="border-t-2 border-gray-200 px-4 py-3 bg-white">
-                <div v-if="dayData.routes.length === 0" class="text-center py-4">
-                  <p class="text-gray-600 text-xs">No hay rutas para este día</p>
-                </div>
-                <div v-else class="space-y-2">
-                  <div v-for="route in dayData.routes" :key="route.id"
-                    class="bg-gray-50 border-l-4 border-gray-900 p-3 rounded text-sm">
-                    <h5 class="font-bold text-gray-900 mb-1">{{ getClientName(route.client_id) }}</h5>
-                    <p class="text-gray-600 text-xs mb-1">📍 {{ getClientAddress(route.client_id) }}</p>
-                    <div class="flex items-center justify-between mt-2">
-                      <span class="text-xs font-semibold text-gray-700">{{ formatTime(route.planned_date) }}</span>
-                      <span :class="['px-2 py-1 rounded text-xs font-semibold', {
-                        'bg-orange-100 text-orange-900': route.status === 'pending',
-                        'bg-blue-100 text-blue-900': route.status === 'in_progress',
-                        'bg-green-100 text-green-900': route.status === 'completed'
-                      }]">{{ statusLabel(route.status) }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div v-if="weekRoutes.length === 0" class="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 text-center">
-              <p class="text-orange-700 text-sm">No hay rutas programadas para esta semana</p>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- SCHEDULE SECTION -->
@@ -527,20 +451,7 @@ export default {
       clientFound: false,
       checkinNotes: '',
       performingCheckin: false,
-      geoWatcher: null,
-
-      // 📅 ACCORDION - RUTAS DE LA SEMANA
-      weekRoutes: [],
-      loadingWeekRoutes: false,
-      currentWeekStart: null,
-      expandedWeekDays: {
-        0: true,
-        1: false,
-        2: false,
-        3: false,
-        4: false
-      },
-      dayEmojis: ['🟦', '🟪', '🟩', '🟧', '🟥']
+      geoWatcher: null
     }
   },
   computed: {
@@ -569,39 +480,6 @@ export default {
       const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
       const now = new Date()
       return `${days[now.getDay()]}, ${now.getDate()} de ${months[now.getMonth()]}`
-    },
-    weekStartDate() {
-      return this.currentWeekStart
-    },
-    weekEndDate() {
-      const end = new Date(this.currentWeekStart)
-      end.setDate(end.getDate() + 4)
-      return end
-    },
-    currentWeekNumber() {
-      const d = new Date(this.currentWeekStart)
-      const firstDay = new Date(d.getFullYear(), 0, 1)
-      const preWeek = firstDay.getDay()
-      return Math.ceil(((d - firstDay) / 86400000 + preWeek + 1) / 7)
-    },
-    weekDays() {
-      const days = []
-      const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
-      for (let i = 0; i < 5; i++) {
-        const date = new Date(this.currentWeekStart)
-        date.setDate(date.getDate() + i)
-        const dayRoutes = this.weekRoutes.filter(route => {
-          const routeDate = new Date(route.planned_date)
-          return routeDate.toDateString() === date.toDateString()
-        })
-        days.push({
-          date,
-          dayName: dayNames[i],
-          emoji: this.dayEmojis[i],
-          routes: dayRoutes.sort((a, b) => new Date(a.planned_date) - new Date(b.planned_date))
-        })
-      }
-      return days
     }
   },
   async mounted() {
@@ -612,13 +490,9 @@ export default {
       // 🔑 CRÍTICO: Cargar clientes PRIMERO
       await this.fetchAllClients()
       
-      // Inicializar semana actual
-      this.currentWeekStart = this.getMonday(new Date())
-      
       this.fetchTodayRoutes()
       this.fetchStats()
-      this.fetchClientes()
-      this.fetchWeekRoutes()
+      this.fetchClients()
     } else {
       this.$router.push('/login')
     }
@@ -653,57 +527,6 @@ export default {
     getClientAddress(clientId) {
       const client = this.allClients.find(c => c.id === clientId)
       return client ? client.address : 'Sin dirección'
-    },
-
-    // 📅 ACCORDION - MÉTODOS
-    getMonday(date) {
-      const d = new Date(date)
-      const day = d.getDay()
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-      return new Date(d.setDate(diff))
-    },
-
-    previousWeek() {
-      this.currentWeekStart = new Date(this.currentWeekStart)
-      this.currentWeekStart.setDate(this.currentWeekStart.getDate() - 7)
-      this.fetchWeekRoutes()
-    },
-
-    nextWeek() {
-      this.currentWeekStart = new Date(this.currentWeekStart)
-      this.currentWeekStart.setDate(this.currentWeekStart.getDate() + 7)
-      this.fetchWeekRoutes()
-    },
-
-    toggleDay(dayIndex) {
-      this.expandedWeekDays[dayIndex] = !this.expandedWeekDays[dayIndex]
-    },
-
-    statusLabel(status) {
-      const labels = {
-        pending: '⏳ Pendiente',
-        in_progress: '🔄 En Progreso',
-        completed: '✅ Completada'
-      }
-      return labels[status] || status
-    },
-
-    async fetchWeekRoutes() {
-      try {
-        this.loadingWeekRoutes = true
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/routes/?seller_id=${this.seller.id}`)
-        const routes = await response.json()
-        const weekEnd = new Date(this.currentWeekStart)
-        weekEnd.setDate(weekEnd.getDate() + 4)
-        this.weekRoutes = routes.filter(route => {
-          const routeDate = new Date(route.planned_date)
-          return routeDate >= this.currentWeekStart && routeDate <= weekEnd
-        })
-      } catch (e) {
-        console.error('Error fetching week routes:', e)
-      } finally {
-        this.loadingWeekRoutes = false
-      }
     },
 
     // API calls
@@ -902,41 +725,31 @@ export default {
           console.error('❌ GPS error:', error.code, error.message)
           let message = 'Error de ubicación: '
           switch(error.code) {
-            case error.PERMISSION_DENIED:
-              message += 'Permiso de ubicación denegado. Habilita los permisos de geolocalización en tu navegador.'
-              break
-            case error.POSITION_UNAVAILABLE:
-              message += 'Información de posición no disponible.'
-              break
-            case error.TIMEOUT:
-              message += 'La solicitud de ubicación tardó demasiado.'
-              break
-            default:
-              message += error.message
-          }
-          console.warn(message)
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      )
-
-      // Then watch for continuous updates
-      if (this.geoWatcher !== null) {
-        navigator.geolocation.clearWatch(this.geoWatcher)
+         return
       }
-      
-      this.geoWatcher = navigator.geolocation.watchPosition(
+
+      navigator.geolocation.getCurrentPosition(
         (position) => {
-          console.log('📍 GPS watch update:', position.coords)
           this.currentLocation = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             accuracy: position.coords.accuracy
           }
         },
-        (error) => {
-          console.error('❌ GPS watch error:', error.code, error.message)
+        (error) => console.error('GPS error:', error.message),
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      )
+
+      this.geoWatcher = navigator.geolocation.watchPosition(
+        (position) => {
+          this.currentLocation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          }
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        (error) => console.error('GPS watch error:', error.message),
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
       )
     },
 
@@ -944,12 +757,7 @@ export default {
       this.currentRoute = route
       this.clientFound = false
       this.checkinNotes = ''
-      this.currentLocation = null
       this.showCheckinModal = true
-      // Start GPS when modal opens
-      this.$nextTick(() => {
-        this.initGPS()
-      })
     },
 
     closeCheckinModal() {
@@ -957,12 +765,6 @@ export default {
       this.currentRoute = null
       this.clientFound = false
       this.checkinNotes = ''
-      this.currentLocation = null
-      // Stop GPS watch when modal closes
-      if (this.geoWatcher !== null) {
-        navigator.geolocation.clearWatch(this.geoWatcher)
-        this.geoWatcher = null
-      }
     },
 
     async performCheckin() {
@@ -988,16 +790,7 @@ export default {
           })
         })
 
-        console.log('Check-in response status:', response.status)
-        
-        if (!response.ok) {
-          const error = await response.json()
-          console.error('Check-in error response:', error)
-          throw new Error(`Server error (${response.status}): ${error.detail || 'Unknown error'}`)
-        }
-
         const result = await response.json()
-        console.log('✅ Check-in successful:', result)
         this.closeCheckinModal()
 
         if (result.is_valid) {
@@ -1009,23 +802,4 @@ export default {
         this.fetchTodayRoutes()
       } catch (e) {
         console.error('Error during check-in:', e)
-        alert(`Error durante el check-in: ${e.message}`)
-      } finally {
-        this.performingCheckin = false
-      }
-    },
-
-    logout() {
-      localStorage.removeItem('seller')
-      localStorage.removeItem('token')
-      this.$router.push('/login')
-    }
-  }
-}
-</script>
-
-<style scoped>
-* {
-  -webkit-font-smoothing: antialiased;
-}
-</style>
+        alert('Error durante el check-in')
