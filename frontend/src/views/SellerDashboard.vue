@@ -187,8 +187,7 @@
             ← Anterior
           </button>
           <div class="text-center text-sm">
-            <p class="font-semibold text-gray-900">Página {{ clientsMetadata.page }} de {{ clientsMetadata.total_pages
-              }}</p>
+            <p class="font-semibold text-gray-900">Página {{ clientsMetadata.page }} de {{ clientsMetadata.total_pages}}</p>
             <p class="text-gray-600 text-xs mt-1">Mostrando {{ clients.length }} de {{ clientsMetadata.total }}</p>
           </div>
           <button @click="nextPage" :disabled="!clientsMetadata.has_next"
@@ -360,8 +359,7 @@
         </div>
 
         <div class="mb-6">
-          <label
-            class="flex items-center gap-4 p-4 border-2 border-gray-300 rounded-lg cursor-pointer hover:border-gray-900">
+          <label class="flex items-center gap-4 p-4 border-2 border-gray-300 rounded-lg cursor-pointer hover:border-gray-900">
             <input v-model="clientFound" type="checkbox" class="w-6 h-6 accent-gray-900" />
             <span class="text-gray-900 font-semibold">✓ Cliente confirmado en la ubicación</span>
           </label>
@@ -711,7 +709,6 @@ export default {
 
       console.log('🔍 Starting GPS initialization...')
 
-      // First, get the current position immediately
       navigator.geolocation.getCurrentPosition(
         (position) => {
           console.log('✅ GPS location obtained:', position.coords)
@@ -725,18 +722,20 @@ export default {
           console.error('❌ GPS error:', error.code, error.message)
           let message = 'Error de ubicación: '
           switch(error.code) {
-         return
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          this.currentLocation = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy
+            case 1:
+              message += 'Permiso denegado'
+              break
+            case 2:
+              message += 'Posición no disponible'
+              break
+            case 3:
+              message += 'Tiempo agotado'
+              break
+            default:
+              message += 'Error desconocido'
           }
+          alert(message)
         },
-        (error) => console.error('GPS error:', error.message),
         { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
       )
 
@@ -758,6 +757,7 @@ export default {
       this.clientFound = false
       this.checkinNotes = ''
       this.showCheckinModal = true
+      this.initGPS()
     },
 
     closeCheckinModal() {
@@ -802,4 +802,10 @@ export default {
         this.fetchTodayRoutes()
       } catch (e) {
         console.error('Error during check-in:', e)
-        alert('Error durante el check-in')
+        alert('Error durante el check-in')      } finally {
+        this.performingCheckin = false
+      }
+    }
+  }
+}
+</script>
