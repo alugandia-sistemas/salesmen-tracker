@@ -484,6 +484,7 @@ export default {
     const sellerData = localStorage.getItem('seller')
     if (sellerData) {
       this.seller = JSON.parse(sellerData)
+      this.sellerName = this.seller.name || 'Vendedor'
       
       // 🔑 CRÍTICO: Cargar clientes PRIMERO
       await this.fetchAllClients()
