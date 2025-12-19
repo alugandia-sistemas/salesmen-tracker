@@ -794,11 +794,18 @@ export default {
       
       const weekEnd = new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000)
       
+      // Calculate ISO week number
+      const date = new Date(weekStart)
+      date.setDate(date.getDate() + 4)
+      const yearStart = new Date(date.getFullYear(), 0, 1)
+      const weekNum = Math.ceil((((date - yearStart) / 86400000) + 1) / 7)
+      const year = weekStart.getFullYear()
+      
       const options = { month: 'short', day: 'numeric' }
       const startStr = weekStart.toLocaleDateString('es-ES', options)
       const endStr = weekEnd.toLocaleDateString('es-ES', options)
       
-      return `${startStr} - ${endStr}`
+      return `Semana ${weekNum} (${year}) - ${startStr} - ${endStr}`
     },
     groupedRoutesByDate() {
       // Group routes by date first, then by seller - ONLY SELECTED WEEK
