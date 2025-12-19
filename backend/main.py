@@ -6,13 +6,14 @@ from sqlalchemy.orm import Session, relationship, sessionmaker, joinedload
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from geoalchemy2 import Geometry, Geography
 from geoalchemy2.elements import WKTElement
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 from typing import Optional, List
 import uuid
 import os
 import shutil
 from pathlib import Path
+import pytz
 import math
 # Agregar secrets:
 import secrets
@@ -87,6 +88,26 @@ app.add_middleware(
 #     "CORS_ORIGINS", 
 #     "https://tracker.alugandia.es,salesmen-tracker-frontend-br3otvptg-alugandias-projects.vercel.app"
 # )
+
+# ============================================================================
+# HELPERS DE ZONA HORARIA
+# ============================================================================
+
+# 🕐 Zona horaria: España (CET/CEST)
+TIMEZONE = pytz.timezone('Europe/Madrid')
+
+def get_local_time() -> datetime:
+    """
+    Obtiene la hora actual en la zona horaria local (España)
+    Reemplaza datetime.utcnow() para obtener hora local
+    """
+    return datetime.now(TIMEZONE)
+
+def get_utc_time() -> datetime:
+    """
+    Obtiene la hora actual en UTC (para compatibilidad)
+    """
+    return datetime.now(timezone.utc).astimezone(TIMEZONE).replace(tzinfo=None)
 
 # ============================================================================
 # INICIALIZACIÓN CON RETRY AUTOMÁTICO
@@ -847,7 +868,7 @@ def get_seller_stats(seller_id: str, days: int = 14, db: Session = Depends(get_d
     try:
         seller_uuid = uuid.UUID(seller_id)
         
-        end_date = datetime.utcnow()
+        end_date = get_local_time()
         start_date = end_date - timedelta(days=days)
         
         # Query Visits
@@ -911,7 +932,7 @@ def get_route_tracking(seller_id: str, db: Session = Depends(get_db)):
     """
     try:
         seller_uuid = uuid.UUID(seller_id)
-        today = datetime.utcnow().date()
+        today = get_local_time().date()
         
         # 1. Get Routes for Today
         routes = db.query(Route).filter(
@@ -2150,7 +2171,7 @@ async def checkin_v2(
     ).scalar()
     
     distance_meters = float(distance_result) if distance_result else 0
-    checkin_time = datetime.utcnow()
+    checkin_time = get_local_time()
     
     # Validar check-in
     is_valid, error_message, fraud_flags = validate_checkin(
@@ -2374,7 +2395,7 @@ def postpone_route(
     
     # Actualizar ruta
     route.postpone_reason = reason
-    route.postponed_at = datetime.utcnow()
+    route.postponed_at = get_local_time()
     route.postpone_notes = request.get('notes')
     route.times_postponed = getattr(route, 'times_postponed', 0) + 1
     route.status = 'postponed'
@@ -2693,7 +2714,7 @@ async def checkin(
         distance_meters = float(distance_result) if distance_result else 0
         
         # 🕐 HORA DEL CHECK-IN
-        checkin_time = datetime.utcnow()
+        checkin_time = get_local_time()
         
         # ✅ VALIDAR CHECK-IN (nueva lógica)
         validity_status, error_message, fraud_flags = validate_checkin(
@@ -2806,7 +2827,7 @@ async def checkout(
         distance_meters = float(distance_result) if distance_result else 0
         
         # Actualizar visita
-        visit.checkout_time = datetime.utcnow()
+        visit.checkout_time = get_local_time()
         visit.checkout_location = func.ST_GeomFromText(checkout_point_wkt, 4326)
         visit.checkout_distance_meters = distance_meters
         if request.notes:
