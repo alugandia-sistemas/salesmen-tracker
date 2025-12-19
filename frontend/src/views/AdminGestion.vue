@@ -225,26 +225,28 @@
                 </button>
               </div>
 
-              <div v-if="Object.keys(groupedRoutesByDate).length > 0" class="space-y-6">
+              <div v-if="Object.keys(groupedRoutesByDate).length > 0" class="space-y-4">
                 <!-- Loop through each date -->
                 <div v-for="(sellerGroups, date) in groupedRoutesByDate" :key="date"
                   class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
 
-                  <!-- Date Header -->
-                  <div class="bg-slate-100 dark:bg-slate-700 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
-                    <div class="flex items-center justify-between">
+                  <!-- Date Header (Accordion Toggle) -->
+                  <button @click="expandedDates[date] = !expandedDates[date]" 
+                    class="w-full bg-slate-100 dark:bg-slate-700 px-4 py-3 border-b border-slate-200 dark:border-slate-600 flex items-center justify-between hover:bg-slate-200 dark:hover:bg-slate-600 transition">
+                    <div class="flex items-center gap-3 flex-1 text-left">
+                      <span class="text-xl transition-transform" :style="{ transform: expandedDates[date] ? 'rotate(90deg)' : 'rotate(0)' }">▶️</span>
                       <h3 class="text-lg font-bold text-slate-900 dark:text-white">
                         📅 {{ formatDateHeader(date) }}
                       </h3>
-                      <span class="text-sm font-bold text-slate-600 dark:text-slate-400">
-                        {{ getTotalVisitsForDate(sellerGroups) }} {{ getTotalVisitsForDate(sellerGroups) === 1 ?
-                          'visita' : 'visitas' }}
-                      </span>
                     </div>
-                  </div>
+                    <span class="text-sm font-bold text-slate-600 dark:text-slate-400">
+                      {{ getTotalVisitsForDate(sellerGroups) }} {{ getTotalVisitsForDate(sellerGroups) === 1 ?
+                        'visita' : 'visitas' }}
+                    </span>
+                  </button>
 
-                  <!-- Loop through each seller within date -->
-                  <div class="divide-y divide-slate-100 dark:divide-slate-700">
+                  <!-- Loop through each seller within date (Collapsible) -->
+                  <div v-show="expandedDates[date]" class="divide-y divide-slate-100 dark:divide-slate-700"  style="transition: max-height 0.3s ease">
                     <div v-for="(routes, sellerId) in sellerGroups" :key="sellerId" class="p-4">
                       <!-- Seller Subheader -->
                       <div class="flex items-center gap-3 mb-3">
@@ -694,8 +696,9 @@ export default {
   name: 'AdminPanel',
   data() {
     return {
-      activeTab: 'vendedores',
+      activeTab: 'rutas',
       showSidebar: false, // NEW: Sidebar toggle
+      expandedDates: {}, // Track expanded dates for accordion
       vendedores: [],
       clientes: [],
       rutas: [],
@@ -761,22 +764,36 @@ export default {
   },
   computed: {
     groupedRoutesByDate() {
-      // Group routes by date first, then by seller
+      // Group routes by date first, then by seller - ONLY CURRENT WEEK
       const grouped = {}
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const weekStart = new Date(today)
+      const dayOfWeek = today.getDay()
+      const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1) // Adjust to Monday
+      weekStart.setDate(diff)
 
       this.rutas.forEach(ruta => {
-        const date = new Date(ruta.planned_date).toISOString().split('T')[0] // YYYY-MM-DD
-        const sellerId = ruta.seller_id
+        const routeDate = new Date(ruta.planned_date)
+        const dateStr = routeDate.toISOString().split('T')[0] // YYYY-MM-DD
+        const routeDateObj = new Date(dateStr)
+        routeDateObj.setHours(0, 0, 0, 0)
 
-        if (!grouped[date]) {
-          grouped[date] = {}
+        // Only include routes from the current week
+        const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
+        if (routeDateObj >= weekStart && routeDateObj < weekEnd) {
+          const sellerId = ruta.seller_id
+
+          if (!grouped[dateStr]) {
+            grouped[dateStr] = {}
+          }
+
+          if (!grouped[dateStr][sellerId]) {
+            grouped[dateStr][sellerId] = []
+          }
+
+          grouped[dateStr][sellerId].push(ruta)
         }
-
-        if (!grouped[date][sellerId]) {
-          grouped[date][sellerId] = []
-        }
-
-        grouped[date][sellerId].push(ruta)
       })
 
       // Sort routes within each seller by time
@@ -1269,19 +1286,23 @@ export default {
       return new Date(date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     },
     formatDateHeader(dateStr) {
-      const date = new Date(dateStr)
+      const date = new Date(dateStr + 'T00:00:00')
       const today = new Date()
+      today.setHours(0, 0, 0, 0)
       const tomorrow = new Date(today)
       tomorrow.setDate(tomorrow.getDate() + 1)
+      
+      const dateOnly = new Date(date)
+      dateOnly.setHours(0, 0, 0, 0)
 
       // Check if it's today or tomorrow
-      if (date.toDateString() === today.toDateString()) {
+      if (dateOnly.getTime() === today.getTime()) {
         return 'Hoy'
-      } else if (date.toDateString() === tomorrow.toDateString()) {
+      } else if (dateOnly.getTime() === tomorrow.getTime()) {
         return 'Mañana'
       } else {
         // Return day name and date
-        return date.toLocaleDateString('es-ES', { weekday: 'long', month: 'short', day: 'numeric' })
+        return new Date(dateStr + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', month: 'short', day: 'numeric' })
       }
     },
     formatTime(dateStr) {
