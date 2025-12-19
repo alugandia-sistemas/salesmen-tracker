@@ -284,50 +284,59 @@
 
                       <!-- List of visits for this seller -->
                       <div class="space-y-2">
-                        <div v-for="ruta in routes" :key="ruta.id"
-                          class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700 transition">
+                        <div v-for="ruta in routes" :key="ruta.id" class="bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700 transition overflow-hidden">
+                          
+                          <!-- Main Route Card -->
+                          <div class="flex items-center justify-between p-3">
 
-                          <!-- Left: Time, Client, Status -->
-                          <div class="flex items-center gap-3 flex-1 min-w-0">
-                            <!-- Time -->
-                            <span class="text-sm font-mono font-bold text-slate-600 dark:text-slate-400 shrink-0">
-                              {{ formatTime(ruta.planned_date) }}
-                            </span>
+                            <!-- Left: Time, Client, Status -->
+                            <div class="flex items-center gap-3 flex-1 min-w-0">
+                              <!-- Time -->
+                              <span class="text-sm font-mono font-bold text-slate-600 dark:text-slate-400 shrink-0">
+                                {{ formatTime(ruta.planned_date) }}
+                              </span>
 
-                            <!-- Status Indicator -->
-                            <div class="w-2 h-2 rounded-full shrink-0" :class="{
-                              'bg-slate-300': ruta.status === 'pending',
-                              'bg-emerald-500': ruta.status === 'completed',
-                              'bg-indigo-500': ruta.status === 'in_progress',
-                              'bg-rose-500': ruta.status === 'cancelled'
-                            }"></div>
+                              <!-- Status Indicator -->
+                              <div class="w-2 h-2 rounded-full shrink-0" :class="{
+                                'bg-slate-300': ruta.status === 'pending',
+                                'bg-emerald-500': ruta.status === 'completed',
+                                'bg-indigo-500': ruta.status === 'in_progress',
+                                'bg-rose-500': ruta.status === 'cancelled'
+                              }"></div>
 
-                            <!-- Client Name -->
-                            <span class="text-sm font-bold text-slate-900 dark:text-white truncate">
-                              {{ getNombreCliente(ruta.client_id) }}
-                            </span>
+                              <!-- Client Name -->
+                              <span class="text-sm font-bold text-slate-900 dark:text-white truncate">
+                                {{ getNombreCliente(ruta.client_id) }}
+                              </span>
 
-                            <!-- Status Badge -->
-                            <span class="px-2 py-0.5 rounded text-xs font-bold uppercase shrink-0" :class="{
-                              'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300': ruta.status === 'pending',
-                              'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300': ruta.status === 'completed',
-                              'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300': ruta.status === 'in_progress',
-                              'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300': ruta.status === 'cancelled'
-                            }">
-                              {{ ruta.status }}
-                            </span>
+                              <!-- Status Badge -->
+                              <span class="px-2 py-0.5 rounded text-xs font-bold uppercase shrink-0" :class="{
+                                'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300': ruta.status === 'pending',
+                                'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300': ruta.status === 'completed',
+                                'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300': ruta.status === 'in_progress',
+                                'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300': ruta.status === 'cancelled'
+                              }">
+                                {{ ruta.status }}
+                              </span>
+                            </div>
+
+                            <!-- Right: Actions -->
+                            <div class="flex gap-2 shrink-0 ml-3">
+                              <button @click="editRuta(ruta)" :disabled="ruta.status === 'completed'"
+                                class="text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline disabled:text-slate-400 disabled:cursor-not-allowed">
+                                Editar
+                              </button>
+                              <button @click="deleteRuta(ruta.id)" :disabled="ruta.status === 'completed'"
+                                class="text-rose-600 dark:text-rose-400 font-bold text-xs hover:underline disabled:text-slate-400 disabled:cursor-not-allowed">
+                                Eliminar
+                              </button>
+                            </div>
                           </div>
 
-                          <!-- Right: Actions -->
-                          <div class="flex gap-2 shrink-0 ml-3">
-                            <button @click="editRuta(ruta)"
-                              class="text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline">
-                              Editar
-                            </button>
-                            <button @click="deleteRuta(ruta.id)"
-                              class="text-rose-600 dark:text-rose-400 font-bold text-xs hover:underline">
-                              Eliminar
-                            </button>
+                          <!-- Notes Section (if exists) -->
+                          <div v-if="ruta.notes" class="px-3 pb-3 border-t border-slate-200 dark:border-slate-700">
+                            <p class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">📝 Notas:</p>
+                            <p class="text-sm text-slate-700 dark:text-slate-300 italic">{{ ruta.notes }}</p>
                           </div>
                         </div>
                       </div>
