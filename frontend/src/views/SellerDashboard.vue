@@ -210,30 +210,43 @@
         </div>
 
         <div v-else-if="Object.keys(weekEvents).length > 0" class="space-y-4">
-          <div v-for="(dayEvents, dateStr) in weekEvents" :key="dateStr" class="border-l-4 border-gray-900 bg-gray-50 rounded-r-lg p-4">
-            <!-- Day header -->
-            <p class="font-bold text-gray-900 mb-3">{{ formatDateHeader(dateStr) }}</p>
+          <div v-for="(dayEvents, dateStr) in weekEvents" :key="dateStr" class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
             
-            <!-- Events for this day -->
-            <div class="space-y-2">
-              <div v-for="route in dayEvents" :key="route.id" 
-                class="bg-white border-2 border-gray-200 rounded-lg p-3">
-                <div class="flex items-start justify-between">
-                  <div>
-                    <p class="font-bold text-gray-900">{{ formatTime(route.planned_date) }}</p>
-                    <p class="text-sm text-gray-600">{{ getClientName(route.client_id) }}</p>
+            <!-- Day Header (Accordion Toggle) -->
+            <button @click="expandedDates[dateStr] = !expandedDates[dateStr]" 
+              class="w-full bg-gray-100 px-4 py-3 border-b border-gray-200 flex items-center justify-between hover:bg-gray-200 transition">
+              <div class="flex items-center gap-3 flex-1 text-left">
+                <span class="text-xl transition-transform" :style="{ transform: expandedDates[dateStr] ? 'rotate(90deg)' : 'rotate(0)' }">▶️</span>
+                <h3 class="text-lg font-bold text-gray-900">
+                  📅 {{ formatDateHeader(dateStr) }}
+                </h3>
+              </div>
+              <span class="text-sm font-bold text-gray-600">
+                {{ dayEvents.length }} {{ dayEvents.length === 1 ? 'visita' : 'visitas' }}
+              </span>
+            </button>
+
+            <!-- Events List (Collapsible) -->
+            <div v-show="expandedDates[dateStr]" class="divide-y divide-gray-100">
+              <div v-for="route in dayEvents" :key="route.id" class="p-3">
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 hover:border-gray-900 transition">
+                  <div class="flex items-start justify-between">
+                    <div>
+                      <p class="font-bold text-gray-900">{{ formatTime(route.planned_date) }}</p>
+                      <p class="text-sm text-gray-600">{{ getClientName(route.client_id) }}</p>
+                    </div>
+                    <span :class="[
+                      'px-2 py-1 rounded text-xs font-semibold whitespace-nowrap',
+                      route.status === 'completed' ? 'bg-green-100 text-green-800' :
+                      route.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                      route.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                      'bg-orange-100 text-orange-800'
+                    ]">
+                      {{ route.status === 'completed' ? 'COMPLETADA' : 
+                         route.status === 'in_progress' ? 'EN PROGRESO' :
+                         route.status === 'cancelled' ? 'CANCELADA' : 'PENDIENTE' }}
+                    </span>
                   </div>
-                  <span :class="[
-                    'px-2 py-1 rounded text-xs font-semibold whitespace-nowrap',
-                    route.status === 'completed' ? 'bg-green-100 text-green-800' :
-                    route.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                    route.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                    'bg-orange-100 text-orange-800'
-                  ]">
-                    {{ route.status === 'completed' ? 'COMPLETADA' : 
-                       route.status === 'in_progress' ? 'EN PROGRESO' :
-                       route.status === 'cancelled' ? 'CANCELADA' : 'PENDIENTE' }}
-                  </span>
                 </div>
               </div>
             </div>
@@ -535,6 +548,7 @@ export default {
         visits_completion_percentage: 0
       },
       loadingStats: false,
+      expandedDates: {}, // Track expanded dates for accordion
 
       // Clients section
       clients: [],
