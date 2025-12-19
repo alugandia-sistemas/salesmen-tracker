@@ -218,10 +218,29 @@
             <!-- RUTAS TAB -->
             <div v-else-if="activeTab === 'rutas'" key="rutas">
               <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">Rutas</h2>
+                <div>
+                  <h2 class="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">Rutas</h2>
+                  <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Semana: {{ currentWeekRange }}</p>
+                </div>
                 <button @click="showRutaModal = true"
                   class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-500 transition text-sm flex items-center gap-2">
                   <span>+</span> <span class="hidden md:inline">Nueva Ruta</span>
+                </button>
+              </div>
+
+              <!-- Week Navigation -->
+              <div class="flex items-center justify-center gap-4 mb-6">
+                <button @click="weekOffset--"
+                  class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg font-semibold hover:bg-slate-300 dark:hover:bg-slate-600 transition flex items-center gap-2">
+                  ← Semana Anterior
+                </button>
+                <button @click="weekOffset = 0"
+                  class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-500 transition">
+                  Hoy
+                </button>
+                <button @click="weekOffset++"
+                  class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg font-semibold hover:bg-slate-300 dark:hover:bg-slate-600 transition flex items-center gap-2">
+                  Semana Siguiente →
                 </button>
               </div>
 
@@ -699,6 +718,7 @@ export default {
       activeTab: 'rutas',
       showSidebar: false, // NEW: Sidebar toggle
       expandedDates: {}, // Track expanded dates for accordion
+      weekOffset: 0, // 0 = current week, -1 = last week, 1 = next week
       vendedores: [],
       clientes: [],
       rutas: [],
@@ -763,8 +783,25 @@ export default {
     }
   },
   computed: {
+    currentWeekRange() {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const weekStart = new Date(today)
+      const dayOfWeek = today.getDay()
+      const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)
+      weekStart.setDate(diff)
+      weekStart.setDate(weekStart.getDate() + (this.weekOffset * 7))
+      
+      const weekEnd = new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000)
+      
+      const options = { month: 'short', day: 'numeric' }
+      const startStr = weekStart.toLocaleDateString('es-ES', options)
+      const endStr = weekEnd.toLocaleDateString('es-ES', options)
+      
+      return `${startStr} - ${endStr}`
+    },
     groupedRoutesByDate() {
-      // Group routes by date first, then by seller - ONLY CURRENT WEEK
+      // Group routes by date first, then by seller - ONLY SELECTED WEEK
       const grouped = {}
       const today = new Date()
       today.setHours(0, 0, 0, 0)
@@ -772,6 +809,9 @@ export default {
       const dayOfWeek = today.getDay()
       const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1) // Adjust to Monday
       weekStart.setDate(diff)
+      
+      // Apply week offset (in days)
+      weekStart.setDate(weekStart.getDate() + (this.weekOffset * 7))
 
       this.rutas.forEach(ruta => {
         const routeDate = new Date(ruta.planned_date)
@@ -779,7 +819,7 @@ export default {
         const routeDateObj = new Date(dateStr)
         routeDateObj.setHours(0, 0, 0, 0)
 
-        // Only include routes from the current week
+        // Only include routes from the selected week
         const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
         if (routeDateObj >= weekStart && routeDateObj < weekEnd) {
           const sellerId = ruta.seller_id
