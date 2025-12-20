@@ -1113,6 +1113,12 @@ export default {
       } finally {
         this.performingCheckin = false
       }
+    },
+
+    logout() {
+      localStorage.removeItem('seller')
+      localStorage.removeItem('token')
+      this.$router.push('/login')
     }
   }
 }
