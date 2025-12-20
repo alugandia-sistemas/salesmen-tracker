@@ -35,9 +35,15 @@
               <span class="text-lg font-bold text-gray-900">{{ formatTime(route.planned_date) }}</span>
               <span :class="[
                 'px-3 py-1 rounded-full text-xs font-semibold uppercase',
-                route.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
+                route.status === 'completed' ? 'bg-green-100 text-green-800' : 
+                route.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                route.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                'bg-orange-100 text-orange-800'
               ]">
-                {{ route.status === 'completed' ? 'COMPLETADA' : 'PENDIENTE' }}
+                {{ route.status === 'completed' ? 'COMPLETADA' : 
+                   route.status === 'in_progress' ? 'EN PROGRESO' :
+                   route.status === 'cancelled' ? 'CANCELADA' :
+                   'PENDIENTE' }}
               </span>
             </div>
 
@@ -65,9 +71,17 @@
             </div>
 
             <!-- Action Button -->
-            <button v-if="route.status === 'pending'" @click="iniciarCheckin(route)"
+            <button v-if="route.status === 'pending' || route.status === 'in_progress'" @click="iniciarCheckin(route)"
               class="w-full bg-gray-900 text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition">
               📍 Iniciar Check-in
+            </button>
+            <button v-else-if="route.status === 'completed'"
+              class="w-full bg-green-600 text-white py-3 rounded-lg font-semibold cursor-not-allowed opacity-75">
+              ✅ Completada
+            </button>
+            <button v-else-if="route.status === 'cancelled'"
+              class="w-full bg-red-600 text-white py-3 rounded-lg font-semibold cursor-not-allowed opacity-75">
+              ❌ Cancelada
             </button>
           </div>
         </div>
@@ -131,6 +145,126 @@
         </div>
       </div>
 
+      <!-- CALENDAR SECTION (Weekly Events) -->
+      <div v-if="activeSection === 'calendar'">
+        <div class="mb-6">
+          <h2 class="text-lg font-bold text-gray-900 mb-4">📅 VISITAS DE LA SEMANA</h2>
+          
+          <!-- Week Navigation -->
+          <div class="flex items-center justify-between mb-6 gap-2">
+            <button @click="previousWeek"
+              class="px-3 py-2 rounded-lg font-semibold text-sm bg-gray-100 text-gray-900 hover:bg-gray-200 transition">
+              ← Anterior
+            </button>
+            <div class="text-center flex-1">
+              <p class="font-semibold text-gray-900">{{ currentWeekDisplay }}</p>
+            </div>
+            <button @click="nextWeek"
+              class="px-3 py-2 rounded-lg font-semibold text-sm bg-gray-100 text-gray-900 hover:bg-gray-200 transition">
+              Siguiente →
+            </button>
+          </div>
+        </div>
+
+        <!-- Stats for the week -->
+        <div class="space-y-3 mb-6">
+          <!-- Total Visits this week -->
+          <div class="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-semibold text-blue-900">Visitas esta semana</p>
+                <p class="text-2xl font-bold text-blue-900">{{ weekStats.total_visits }}</p>
+              </div>
+              <span class="text-3xl">📍</span>
+            </div>
+          </div>
+
+          <!-- Completed this week -->
+          <div class="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 rounded-xl p-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-semibold text-green-900">Completadas</p>
+                <p class="text-2xl font-bold text-green-900">{{ weekStats.completed_visits }}</p>
+              </div>
+              <span class="text-3xl">✅</span>
+            </div>
+          </div>
+
+          <!-- Pending this week -->
+          <div class="bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-200 rounded-xl p-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-semibold text-orange-900">Pendientes</p>
+                <p class="text-2xl font-bold text-orange-900">{{ weekStats.pending_visits }}</p>
+              </div>
+              <span class="text-3xl">⏳</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Events grouped by day -->
+        <h3 class="text-md font-bold text-gray-900 mb-4">Eventos de la semana</h3>
+        
+        <div v-if="loadingWeekEvents" class="text-center py-10">
+          <p class="text-gray-500">Cargando eventos...</p>
+        </div>
+
+        <div v-else-if="Object.keys(weekEvents).length > 0" class="space-y-4">
+          <div v-for="(dayEvents, dateStr) in weekEvents" :key="dateStr" class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+            
+            <!-- Day Header (Accordion Toggle) -->
+            <button @click="expandedDates[dateStr] = !expandedDates[dateStr]" 
+              class="w-full bg-gray-100 px-4 py-3 border-b border-gray-200 flex items-center justify-between hover:bg-gray-200 transition">
+              <div class="flex items-center gap-3 flex-1 text-left">
+                <span class="text-xl transition-transform" :style="{ transform: expandedDates[dateStr] ? 'rotate(90deg)' : 'rotate(0)' }">▶️</span>
+                <h3 class="text-lg font-bold text-gray-900">
+                  📅 {{ formatDateHeader(dateStr) }}
+                </h3>
+              </div>
+              <span class="text-sm font-bold text-gray-600">
+                {{ dayEvents.length }} {{ dayEvents.length === 1 ? 'visita' : 'visitas' }}
+              </span>
+            </button>
+
+            <!-- Events List (Collapsible) -->
+            <div v-show="expandedDates[dateStr]" class="divide-y divide-gray-100">
+              <div v-for="route in dayEvents" :key="route.id" class="p-3">
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 hover:border-gray-900 transition">
+                  <div class="flex items-start justify-between mb-2">
+                    <div>
+                      <p class="font-bold text-gray-900">{{ formatTime(route.planned_date) }}</p>
+                      <p class="text-sm text-gray-600">{{ getClientName(route.client_id) }}</p>
+                    </div>
+                    <span :class="[
+                      'px-2 py-1 rounded text-xs font-semibold whitespace-nowrap',
+                      route.status === 'completed' ? 'bg-green-100 text-green-800' :
+                      route.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                      route.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                      'bg-orange-100 text-orange-800'
+                    ]">
+                      {{ route.status === 'completed' ? 'COMPLETADA' : 
+                         route.status === 'in_progress' ? 'EN PROGRESO' :
+                         route.status === 'cancelled' ? 'CANCELADA' : 'PENDIENTE' }}
+                    </span>
+                  </div>
+
+                  <!-- Notes Section (if exists) -->
+                  <div v-if="route.notes" class="mt-2 pt-2 border-t border-gray-200">
+                    <p class="text-xs font-semibold text-gray-600 mb-1">📝 Notas:</p>
+                    <p class="text-sm text-gray-700">{{ route.notes }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- No events -->
+        <div v-else class="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center">
+          <p class="text-gray-500">No hay visitas programadas para esta semana</p>
+        </div>
+      </div>
+
       <!-- CLIENTS SECTION -->
       <div v-if="activeSection === 'clients'">
         <h2 class="text-lg font-bold text-gray-900 mb-4">👥 CLIENTES</h2>
@@ -187,8 +321,7 @@
             ← Anterior
           </button>
           <div class="text-center text-sm">
-            <p class="font-semibold text-gray-900">Página {{ clientsMetadata.page }} de {{ clientsMetadata.total_pages
-              }}</p>
+            <p class="font-semibold text-gray-900">Página {{ clientsMetadata.page }} de {{ clientsMetadata.total_pages}}</p>
             <p class="text-gray-600 text-xs mt-1">Mostrando {{ clients.length }} de {{ clientsMetadata.total }}</p>
           </div>
           <button @click="nextPage" :disabled="!clientsMetadata.has_next"
@@ -219,7 +352,16 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <span class="text-xs font-semibold">Agenda</span>
+          <span class="text-xs font-semibold">Resumen</span>
+        </button>
+
+        <button @click="activeSection = 'calendar'" :class="['flex flex-col items-center gap-1 px-4 py-2 transition',
+          activeSection === 'calendar' ? 'text-gray-900' : 'text-gray-400']">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+          </svg>
+          <span class="text-xs font-semibold">Semana</span>
         </button>
 
         <button @click="activeSection = 'clients'" :class="['flex flex-col items-center gap-1 px-4 py-2 transition',
@@ -360,8 +502,7 @@
         </div>
 
         <div class="mb-6">
-          <label
-            class="flex items-center gap-4 p-4 border-2 border-gray-300 rounded-lg cursor-pointer hover:border-gray-900">
+          <label class="flex items-center gap-4 p-4 border-2 border-gray-300 rounded-lg cursor-pointer hover:border-gray-900">
             <input v-model="clientFound" type="checkbox" class="w-6 h-6 accent-gray-900" />
             <span class="text-gray-900 font-semibold">✓ Cliente confirmado en la ubicación</span>
           </label>
@@ -413,6 +554,7 @@ export default {
         visits_completion_percentage: 0
       },
       loadingStats: false,
+      expandedDates: {}, // Track expanded dates for accordion
 
       // Clients section
       clients: [],
@@ -451,16 +593,51 @@ export default {
       clientFound: false,
       checkinNotes: '',
       performingCheckin: false,
-      geoWatcher: null
+      geoWatcher: null,
+
+      // Calendar section
+      weekOffset: 0, // 0 = current week, -1 = previous, 1 = next
+      weekEvents: {}, // { dateStr: [routes] }
+      loadingWeekEvents: false,
+      weekStats: {
+        total_visits: 0,
+        completed_visits: 0,
+        pending_visits: 0
+      }
     }
   },
   computed: {
+    currentWeekDisplay() {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const weekStart = new Date(today)
+      const dayOfWeek = today.getDay()
+      const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)
+      weekStart.setDate(diff)
+      weekStart.setDate(weekStart.getDate() + (this.weekOffset * 7))
+      
+      const weekEnd = new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000)
+      
+      // Calculate ISO week number
+      const date = new Date(weekStart)
+      date.setDate(date.getDate() + 4)
+      const yearStart = new Date(date.getFullYear(), 0, 1)
+      const weekNum = Math.ceil((((date - yearStart) / 86400000) + 1) / 7)
+      const year = weekStart.getFullYear()
+      
+      const options = { month: 'short', day: 'numeric' }
+      const startStr = weekStart.toLocaleDateString('es-ES', options)
+      const endStr = weekEnd.toLocaleDateString('es-ES', options)
+      
+      return `Semana ${weekNum} (${year}) - ${startStr} - ${endStr}`
+    },
     currentSectionTitle() {
       if (this.activeSection === 'route') {
         return 'Ruta de hoy'
       }
       const titles = {
         schedule: 'Agenda',
+        calendar: 'Semana',
         clients: 'Clientes'
       }
       return titles[this.activeSection] || 'Dashboard'
@@ -486,12 +663,14 @@ export default {
     const sellerData = localStorage.getItem('seller')
     if (sellerData) {
       this.seller = JSON.parse(sellerData)
+      this.sellerName = this.seller.name || 'Vendedor'
       
       // 🔑 CRÍTICO: Cargar clientes PRIMERO
       await this.fetchAllClients()
       
       this.fetchTodayRoutes()
       this.fetchStats()
+      this.fetchWeekEvents()
       this.fetchClients()
     } else {
       this.$router.push('/login')
@@ -556,6 +735,100 @@ export default {
       } finally {
         this.loadingStats = false
       }
+    },
+
+    async fetchWeekEvents() {
+      try {
+        this.loadingWeekEvents = true
+        
+        // Calcular los días de la semana actual
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const weekStart = new Date(today)
+        const dayOfWeek = today.getDay()
+        const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)
+        weekStart.setDate(diff)
+        weekStart.setDate(weekStart.getDate() + (this.weekOffset * 7))
+        
+        const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+        // Obtener todas las rutas
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/routes/?seller_id=${this.seller.id}`)
+        const allRoutes = await response.json()
+
+        // Filtrar por semana
+        const grouped = {}
+        let totalVisits = 0
+        let completedVisits = 0
+        let pendingVisits = 0
+
+        allRoutes.forEach(route => {
+          const routeDate = new Date(route.planned_date)
+          const dateStr = routeDate.toISOString().split('T')[0]
+          const routeDateObj = new Date(dateStr)
+          routeDateObj.setHours(0, 0, 0, 0)
+
+          if (routeDateObj >= weekStart && routeDateObj < weekEnd) {
+            if (!grouped[dateStr]) {
+              grouped[dateStr] = []
+            }
+            grouped[dateStr].push(route)
+            
+            totalVisits++
+            if (route.status === 'completed') {
+              completedVisits++
+            } else if (route.status === 'pending' || route.status === 'in_progress') {
+              pendingVisits++
+            }
+          }
+        })
+
+        // Ordenar fechas
+        const sortedGrouped = {}
+        Object.keys(grouped).sort((a, b) => new Date(a) - new Date(b)).forEach(date => {
+          sortedGrouped[date] = grouped[date]
+        })
+
+        this.weekEvents = sortedGrouped
+        this.weekStats = {
+          total_visits: totalVisits,
+          completed_visits: completedVisits,
+          pending_visits: pendingVisits
+        }
+      } catch (e) {
+        console.error('Error fetching week events:', e)
+      } finally {
+        this.loadingWeekEvents = false
+      }
+    },
+
+    formatDateHeader(dateStr) {
+      const date = new Date(dateStr + 'T00:00:00')
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      
+      const dateOnly = new Date(date)
+      dateOnly.setHours(0, 0, 0, 0)
+
+      if (dateOnly.getTime() === today.getTime()) {
+        return 'Hoy'
+      } else if (dateOnly.getTime() === tomorrow.getTime()) {
+        return 'Mañana'
+      } else {
+        return new Date(dateStr + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', month: 'short', day: 'numeric' })
+      }
+    },
+
+    previousWeek() {
+      this.weekOffset--
+      this.fetchWeekEvents()
+    },
+
+    nextWeek() {
+      this.weekOffset++
+      this.fetchWeekEvents()
     },
 
     async fetchClients(page = 1) {
@@ -711,7 +984,6 @@ export default {
 
       console.log('🔍 Starting GPS initialization...')
 
-      // First, get the current position immediately
       navigator.geolocation.getCurrentPosition(
         (position) => {
           console.log('✅ GPS location obtained:', position.coords)
@@ -725,40 +997,32 @@ export default {
           console.error('❌ GPS error:', error.code, error.message)
           let message = 'Error de ubicación: '
           switch(error.code) {
-            case error.PERMISSION_DENIED:
-              message += 'Permiso de ubicación denegado. Habilita los permisos de geolocalización en tu navegador.'
+            case 1:
+              message += 'Permiso denegado'
               break
-            case error.POSITION_UNAVAILABLE:
-              message += 'Información de posición no disponible.'
+            case 2:
+              message += 'Posición no disponible'
               break
-            case error.TIMEOUT:
-              message += 'La solicitud de ubicación tardó demasiado.'
+            case 3:
+              message += 'Tiempo agotado'
               break
             default:
-              message += error.message
+              message += 'Error desconocido'
           }
-          console.warn(message)
+          alert(message)
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       )
 
-      // Then watch for continuous updates
-      if (this.geoWatcher !== null) {
-        navigator.geolocation.clearWatch(this.geoWatcher)
-      }
-      
       this.geoWatcher = navigator.geolocation.watchPosition(
         (position) => {
-          console.log('📍 GPS watch update:', position.coords)
           this.currentLocation = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             accuracy: position.coords.accuracy
           }
         },
-        (error) => {
-          console.error('❌ GPS watch error:', error.code, error.message)
-        },
+        (error) => console.error('GPS watch error:', error.message),
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       )
     },
@@ -767,12 +1031,8 @@ export default {
       this.currentRoute = route
       this.clientFound = false
       this.checkinNotes = ''
-      this.currentLocation = null
       this.showCheckinModal = true
-      // Start GPS when modal opens
-      this.$nextTick(() => {
-        this.initGPS()
-      })
+      this.initGPS()
     },
 
     closeCheckinModal() {
@@ -780,12 +1040,6 @@ export default {
       this.currentRoute = null
       this.clientFound = false
       this.checkinNotes = ''
-      this.currentLocation = null
-      // Stop GPS watch when modal closes
-      if (this.geoWatcher !== null) {
-        navigator.geolocation.clearWatch(this.geoWatcher)
-        this.geoWatcher = null
-      }
     },
 
     async performCheckin() {
@@ -796,6 +1050,7 @@ export default {
 
       try {
         this.performingCheckin = true
+        console.log('📍 Iniciando check-in para ruta:', this.currentRoute.id)
 
         const response = await fetch(`${import.meta.env.VITE_API_URL}/visits/checkin/`, {
           method: 'POST',
@@ -811,28 +1066,50 @@ export default {
           })
         })
 
-        console.log('Check-in response status:', response.status)
-        
-        if (!response.ok) {
-          const error = await response.json()
-          console.error('Check-in error response:', error)
-          throw new Error(`Server error (${response.status}): ${error.detail || 'Unknown error'}`)
-        }
-
         const result = await response.json()
-        console.log('✅ Check-in successful:', result)
-        this.closeCheckinModal()
+        console.log('✅ Resultado del check-in:', result)
+        console.log('📊 Validity status:', result.validity_status)
 
-        if (result.is_valid) {
-          alert('✅ Check-in exitoso!')
-        } else {
-          alert(`⚠️ Check-in registrado con advertencias: ${result.message}`)
+        // Determinar el estado basado en validity_status
+        let newStatus = 'pending'
+        let alertMessage = ''
+        
+        if (result.validity_status === 'valid_1') {
+          newStatus = 'completed'
+          alertMessage = '✅ Check-in válido dentro de horario comercial. Ruta completada.'
+        } else if (result.validity_status === 'valid_2') {
+          newStatus = 'completed'
+          alertMessage = '✅ Check-in válido pero fuera de horario comercial. Ruta completada (con incidente).'
+        } else if (result.validity_status === 'invalid') {
+          newStatus = 'completed'  // Se marca como completada pero con incidente
+          alertMessage = '❌ Check-in inválido. Ruta marcada como realizada con incidente:\n' + result.validation_error
         }
 
-        this.fetchTodayRoutes()
+        // Actualizar estado de la ruta localmente
+        this.currentRoute.status = newStatus
+        
+        // Encontrar y actualizar en routesToday
+        const routeIndex = this.routesToday.findIndex(r => r.id === this.currentRoute.id)
+        if (routeIndex !== -1) {
+          this.routesToday[routeIndex].status = newStatus
+          console.log('✅ Ruta actualizada localmente. Nuevo estado:', this.routesToday[routeIndex].status)
+        }
+
+        alert(alertMessage)
+        
+        this.closeCheckinModal()
+        
+        // Refrescar datos después de un breve delay
+        setTimeout(() => {
+          console.log('🔄 Refrescando datos...')
+          this.fetchTodayRoutes()
+          this.fetchStats()
+          this.fetchWeekEvents()
+        }, 500)
+        
       } catch (e) {
         console.error('Error during check-in:', e)
-        alert(`Error durante el check-in: ${e.message}`)
+        alert('Error durante el check-in')
       } finally {
         this.performingCheckin = false
       }
@@ -846,9 +1123,3 @@ export default {
   }
 }
 </script>
-
-<style scoped>
-* {
-  -webkit-font-smoothing: antialiased;
-}
-</style>

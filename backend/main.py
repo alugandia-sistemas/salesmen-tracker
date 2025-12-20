@@ -6,13 +6,14 @@ from sqlalchemy.orm import Session, relationship, sessionmaker, joinedload
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from geoalchemy2 import Geometry, Geography
 from geoalchemy2.elements import WKTElement
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 from typing import Optional, List
 import uuid
 import os
 import shutil
 from pathlib import Path
+import pytz
 import math
 # Agregar secrets:
 import secrets
@@ -87,6 +88,26 @@ app.add_middleware(
 #     "CORS_ORIGINS", 
 #     "https://tracker.alugandia.es,salesmen-tracker-frontend-br3otvptg-alugandias-projects.vercel.app"
 # )
+
+# ============================================================================
+# HELPERS DE ZONA HORARIA
+# ============================================================================
+
+# 🕐 Zona horaria: España (CET/CEST)
+TIMEZONE = pytz.timezone('Europe/Madrid')
+
+def get_local_time() -> datetime:
+    """
+    Obtiene la hora actual en la zona horaria local (España)
+    Reemplaza datetime.utcnow() para obtener hora local
+    """
+    return datetime.now(TIMEZONE)
+
+def get_utc_time() -> datetime:
+    """
+    Obtiene la hora actual en UTC (para compatibilidad)
+    """
+    return datetime.now(timezone.utc).astimezone(TIMEZONE).replace(tzinfo=None)
 
 # ============================================================================
 # INICIALIZACIÓN CON RETRY AUTOMÁTICO
@@ -424,6 +445,7 @@ class CheckInResponse(BaseModel):
     validation_error: Optional[str] = None
     fraud_flags: Optional[List[str]] = None
     message: str
+    validity_status: Optional[str] = None  # valid_1, valid_2, invalid
     
     class Config:
         from_attributes = True
@@ -612,38 +634,51 @@ def validate_checkin(
     db: Session,
     seller_id: str,
     client_id: str
-) -> tuple[bool, Optional[str], List[str]]:
+) -> tuple[str, Optional[str], List[str]]:
     """
-    ✅ LÓGICA DE VALIDACIÓN ROBUSTA
+    ✅ NUEVA LÓGICA DE VALIDACIÓN (Alugandia 2025)
     
-    Retorna: (is_valid, error_message, fraud_flags)
+    Horario comercial: 7:30 AM - 6:15 PM
+    
+    Retorna: (validity_status, error_message, fraud_flags)
+    
+    validity_status puede ser:
+    - "valid_1": Check-in válido dentro de horario comercial y dentro de 100m
+    - "valid_2": Check-in válido pero fuera de horario (dentro de 100m)
+    - "invalid": Check-in no válido (fuera de horario Y fuera de 100m)
     """
     
     VALID_DISTANCE = 100  # Metros
-    BUSINESS_HOURS_START = 8
-    BUSINESS_HOURS_END = 18
+    BUSINESS_HOURS_START_HOUR = 7
+    BUSINESS_HOURS_START_MIN = 30
+    BUSINESS_HOURS_END_HOUR = 18
+    BUSINESS_HOURS_END_MIN = 15
     
     fraud_flags = []
-    is_valid = True
+    validity_status = "valid_1"  # por defecto
     error_message = None
     
-    # 1️⃣ VALIDACIÓN DE DISTANCIA
-    if distance_meters > VALID_DISTANCE:
-        is_valid = False
-        error_message = f"Ubicación fuera de rango: {distance_meters:.0f}m (máximo: {VALID_DISTANCE}m)"
+    # Convertir hora actual a minutos desde medianoche
+    current_minutes = checkin_time.hour * 60 + checkin_time.minute
+    business_start_minutes = BUSINESS_HOURS_START_HOUR * 60 + BUSINESS_HOURS_START_MIN
+    business_end_minutes = BUSINESS_HOURS_END_HOUR * 60 + BUSINESS_HOURS_END_MIN
+    
+    # Determinar si está en horario comercial
+    is_business_hours = business_start_minutes <= current_minutes < business_end_minutes
+    
+    # Determinar si está dentro de rango GPS
+    is_within_range = distance_meters <= VALID_DISTANCE
+    
+    # 1️⃣ VALIDAR DISTANCIA
+    if not is_within_range:
         fraud_flags.append(f"OUT_OF_RANGE|{distance_meters:.0f}m")
     
-    # 2️⃣ VALIDACIÓN DE HORARIO
-    hour = checkin_time.hour
-    if hour < BUSINESS_HOURS_START or hour >= BUSINESS_HOURS_END:
-        is_valid = False
-        error_message = f"Fuera de horario comercial ({BUSINESS_HOURS_START}:00-{BUSINESS_HOURS_END}:00)"
-        fraud_flags.append(f"OUT_OF_HOURS|{hour}:00")
+    # 2️⃣ VALIDAR HORARIO
+    if not is_business_hours:
+        fraud_flags.append(f"OUT_OF_HOURS|{checkin_time.strftime('%H:%M')}")
     
-    # 3️⃣ VALIDACIÓN MANUAL (cliente confirmado)
+    # 3️⃣ VALIDAR CLIENTE ENCONTRADO
     if not client_found:
-        is_valid = False
-        error_message = "Cliente no confirmado en la ubicación"
         fraud_flags.append("CLIENT_NOT_FOUND")
     
     # 4️⃣ DETECCIÓN DE FRAUDE: Check-ins repetidos en corto tiempo
@@ -668,7 +703,33 @@ def validate_checkin(
     if len(other_visits) > 0:
         fraud_flags.append(f"MULTIPLE_LOCATIONS|{len(other_visits)} check-ins en 1 minuto")
     
-    return is_valid, error_message, fraud_flags
+    # ============================================================================
+    # LÓGICA DE ESTADOS FINAL
+    # ============================================================================
+    
+    # Caso 1: DENTRO DE HORARIO y DENTRO DE RANGO → Valid 1 ✅
+    if is_business_hours and is_within_range and client_found:
+        validity_status = "valid_1"
+        error_message = "Check-in válido dentro de horario comercial"
+    
+    # Caso 2: FUERA DE HORARIO pero DENTRO DE RANGO → Valid 2 (con flag) ⚠️
+    elif not is_business_hours and is_within_range and client_found:
+        validity_status = "valid_2"
+        error_message = "Check-in válido pero fuera de horario comercial"
+    
+    # Caso 3: FUERA DE HORARIO y FUERA DE RANGO → Invalid ❌
+    else:
+        validity_status = "invalid"
+        if not is_within_range and not is_business_hours:
+            error_message = f"Check-in inválido: fuera de horario ({checkin_time.strftime('%H:%M')}) y fuera de rango ({distance_meters:.0f}m)"
+        elif not is_within_range:
+            error_message = f"Check-in inválido: ubicación fuera de rango ({distance_meters:.0f}m)"
+        elif not is_business_hours:
+            error_message = f"Check-in inválido: fuera de horario comercial ({checkin_time.strftime('%H:%M')})"
+        else:
+            error_message = "Check-in inválido: cliente no confirmado"
+    
+    return validity_status, error_message, fraud_flags
 
 
 # ============================================================================
@@ -807,7 +868,7 @@ def get_seller_stats(seller_id: str, days: int = 14, db: Session = Depends(get_d
     try:
         seller_uuid = uuid.UUID(seller_id)
         
-        end_date = datetime.utcnow()
+        end_date = get_local_time()
         start_date = end_date - timedelta(days=days)
         
         # Query Visits
@@ -871,7 +932,7 @@ def get_route_tracking(seller_id: str, db: Session = Depends(get_db)):
     """
     try:
         seller_uuid = uuid.UUID(seller_id)
-        today = datetime.utcnow().date()
+        today = get_local_time().date()
         
         # 1. Get Routes for Today
         routes = db.query(Route).filter(
@@ -2110,7 +2171,7 @@ async def checkin_v2(
     ).scalar()
     
     distance_meters = float(distance_result) if distance_result else 0
-    checkin_time = datetime.utcnow()
+    checkin_time = get_local_time()
     
     # Validar check-in
     is_valid, error_message, fraud_flags = validate_checkin(
@@ -2334,7 +2395,7 @@ def postpone_route(
     
     # Actualizar ruta
     route.postpone_reason = reason
-    route.postponed_at = datetime.utcnow()
+    route.postponed_at = get_local_time()
     route.postpone_notes = request.get('notes')
     route.times_postponed = getattr(route, 'times_postponed', 0) + 1
     route.status = 'postponed'
@@ -2653,10 +2714,10 @@ async def checkin(
         distance_meters = float(distance_result) if distance_result else 0
         
         # 🕐 HORA DEL CHECK-IN
-        checkin_time = datetime.utcnow()
+        checkin_time = get_local_time()
         
-        # ✅ VALIDAR CHECK-IN
-        is_valid, error_message, fraud_flags = validate_checkin(
+        # ✅ VALIDAR CHECK-IN (nueva lógica)
+        validity_status, error_message, fraud_flags = validate_checkin(
             distance_meters=distance_meters,
             checkin_time=checkin_time,
             client_found=request.client_found,
@@ -2669,7 +2730,7 @@ async def checkin(
         photo_url = None
         
         # 💾 GUARDAR REGISTRO DE VISITA
-        print(f"[CHECK-IN] 💾 Creating Visit record...")
+        print(f"[CHECK-IN] 💾 Creating Visit record... validity_status={validity_status}")
         visit = Visit(
             route_id=route_id,
             seller_id=seller_id,
@@ -2680,7 +2741,7 @@ async def checkin(
             checkin_distance_meters=distance_meters,
             checkin_photo_url=photo_url,
             
-            checkin_is_valid=is_valid,
+            checkin_is_valid=(validity_status != "invalid"),
             checkin_validation_error=error_message,
             fraud_flags="|".join(fraud_flags) if fraud_flags else None,
             notes=request.notes
@@ -2694,18 +2755,32 @@ async def checkin(
         db.refresh(visit)
         print(f"[CHECK-IN] ✅ Visit saved successfully! ID={visit.id}")
         
+        # 🔄 ACTUALIZAR ESTADO DE LA RUTA
+        print(f"[CHECK-IN] 🔄 Updating route status to 'completed'...")
+        route.status = "completed"
+        db.add(route)
+        db.commit()
+        print(f"[CHECK-IN] 🔄 Route updated! New status={route.status}")
+        
         # 📊 GENERAR RESPUESTA
-        message = "✅ Check-in exitoso" if is_valid else f"⚠️ Check-in con advertencias: {error_message}"
-        print(f"[CHECK-IN] 📊 Response: {message}")
+        status_message = {
+            "valid_1": "✅ Check-in válido dentro de horario comercial",
+            "valid_2": "✅ Check-in válido (fuera de horario comercial)",
+            "invalid": "❌ Check-in inválido"
+        }
+        
+        message = status_message.get(validity_status, "Check-in procesado")
+        print(f"[CHECK-IN] 📊 Response: {message} ({validity_status})")
         
         return CheckInResponse(
             visit_id=str(visit.id),
             success=True,
-            is_valid=is_valid,
+            is_valid=(validity_status != "invalid"),
             distance_meters=distance_meters,
             validation_error=error_message,
             fraud_flags=fraud_flags if fraud_flags else None,
-            message=message
+            message=message,
+            validity_status=validity_status
         )
     
     except Exception as e:
@@ -2752,7 +2827,7 @@ async def checkout(
         distance_meters = float(distance_result) if distance_result else 0
         
         # Actualizar visita
-        visit.checkout_time = datetime.utcnow()
+        visit.checkout_time = get_local_time()
         visit.checkout_location = func.ST_GeomFromText(checkout_point_wkt, 4326)
         visit.checkout_distance_meters = distance_meters
         if request.notes:

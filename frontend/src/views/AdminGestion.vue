@@ -218,33 +218,54 @@
             <!-- RUTAS TAB -->
             <div v-else-if="activeTab === 'rutas'" key="rutas">
               <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">Rutas</h2>
+                <div>
+                  <h2 class="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">Rutas</h2>
+                  <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Semana: {{ currentWeekRange }}</p>
+                </div>
                 <button @click="showRutaModal = true"
                   class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-500 transition text-sm flex items-center gap-2">
                   <span>+</span> <span class="hidden md:inline">Nueva Ruta</span>
                 </button>
               </div>
 
-              <div v-if="Object.keys(groupedRoutesByDate).length > 0" class="space-y-6">
+              <!-- Week Navigation -->
+              <div class="flex items-center justify-center gap-4 mb-6">
+                <button @click="weekOffset--"
+                  class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg font-semibold hover:bg-slate-300 dark:hover:bg-slate-600 transition flex items-center gap-2">
+                  ← Semana Anterior
+                </button>
+                <button @click="weekOffset = 0"
+                  class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-500 transition">
+                  Hoy
+                </button>
+                <button @click="weekOffset++"
+                  class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg font-semibold hover:bg-slate-300 dark:hover:bg-slate-600 transition flex items-center gap-2">
+                  Semana Siguiente →
+                </button>
+              </div>
+
+              <div v-if="Object.keys(groupedRoutesByDate).length > 0" class="space-y-4">
                 <!-- Loop through each date -->
                 <div v-for="(sellerGroups, date) in groupedRoutesByDate" :key="date"
                   class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
 
-                  <!-- Date Header -->
-                  <div class="bg-slate-100 dark:bg-slate-700 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
-                    <div class="flex items-center justify-between">
+                  <!-- Date Header (Accordion Toggle) -->
+                  <button @click="expandedDates[date] = !expandedDates[date]" 
+                    class="w-full bg-slate-100 dark:bg-slate-700 px-4 py-3 border-b border-slate-200 dark:border-slate-600 flex items-center justify-between hover:bg-slate-200 dark:hover:bg-slate-600 transition">
+                    <div class="flex items-center gap-3 flex-1 text-left">
+                      <span class="text-xl transition-transform" :style="{ transform: expandedDates[date] ? 'rotate(90deg)' : 'rotate(0)' }">▶️</span>
                       <h3 class="text-lg font-bold text-slate-900 dark:text-white">
                         📅 {{ formatDateHeader(date) }}
                       </h3>
-                      <span class="text-sm font-bold text-slate-600 dark:text-slate-400">
-                        {{ getTotalVisitsForDate(sellerGroups) }} {{ getTotalVisitsForDate(sellerGroups) === 1 ?
-                          'visita' : 'visitas' }}
-                      </span>
                     </div>
-                  </div>
+                    <span class="text-sm font-bold text-slate-600 dark:text-slate-400">
+                      {{ getTotalVisitsForDate(sellerGroups) }} {{ getTotalVisitsForDate(sellerGroups) === 1 ?
+                        'visita' : 'visitas' }}
+                    </span>
+                  </button>
 
-                  <!-- Loop through each seller within date -->
-                  <div class="divide-y divide-slate-100 dark:divide-slate-700">
+                  <!-- Loop through each seller within date (Collapsible) -->
+                  <div v-show="expandedDates[date]" class="divide-y divide-slate-100 dark:divide-slate-700"  style="transition: max-height 0.3s ease">
                     <div v-for="(routes, sellerId) in sellerGroups" :key="sellerId" class="p-4">
                       <!-- Seller Subheader -->
                       <div class="flex items-center gap-3 mb-3">
@@ -263,50 +284,59 @@
 
                       <!-- List of visits for this seller -->
                       <div class="space-y-2">
-                        <div v-for="ruta in routes" :key="ruta.id"
-                          class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700 transition">
+                        <div v-for="ruta in routes" :key="ruta.id" class="bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700 transition overflow-hidden">
+                          
+                          <!-- Main Route Card -->
+                          <div class="flex items-center justify-between p-3">
 
-                          <!-- Left: Time, Client, Status -->
-                          <div class="flex items-center gap-3 flex-1 min-w-0">
-                            <!-- Time -->
-                            <span class="text-sm font-mono font-bold text-slate-600 dark:text-slate-400 shrink-0">
-                              {{ formatTime(ruta.planned_date) }}
-                            </span>
+                            <!-- Left: Time, Client, Status -->
+                            <div class="flex items-center gap-3 flex-1 min-w-0">
+                              <!-- Time -->
+                              <span class="text-sm font-mono font-bold text-slate-600 dark:text-slate-400 shrink-0">
+                                {{ formatTime(ruta.planned_date) }}
+                              </span>
 
-                            <!-- Status Indicator -->
-                            <div class="w-2 h-2 rounded-full shrink-0" :class="{
-                              'bg-slate-300': ruta.status === 'pending',
-                              'bg-emerald-500': ruta.status === 'completed',
-                              'bg-indigo-500': ruta.status === 'in_progress',
-                              'bg-rose-500': ruta.status === 'cancelled'
-                            }"></div>
+                              <!-- Status Indicator -->
+                              <div class="w-2 h-2 rounded-full shrink-0" :class="{
+                                'bg-slate-300': ruta.status === 'pending',
+                                'bg-emerald-500': ruta.status === 'completed',
+                                'bg-indigo-500': ruta.status === 'in_progress',
+                                'bg-rose-500': ruta.status === 'cancelled'
+                              }"></div>
 
-                            <!-- Client Name -->
-                            <span class="text-sm font-bold text-slate-900 dark:text-white truncate">
-                              {{ getNombreCliente(ruta.client_id) }}
-                            </span>
+                              <!-- Client Name -->
+                              <span class="text-sm font-bold text-slate-900 dark:text-white truncate">
+                                {{ getNombreCliente(ruta.client_id) }}
+                              </span>
 
-                            <!-- Status Badge -->
-                            <span class="px-2 py-0.5 rounded text-xs font-bold uppercase shrink-0" :class="{
-                              'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300': ruta.status === 'pending',
-                              'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300': ruta.status === 'completed',
-                              'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300': ruta.status === 'in_progress',
-                              'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300': ruta.status === 'cancelled'
-                            }">
-                              {{ ruta.status }}
-                            </span>
+                              <!-- Status Badge -->
+                              <span class="px-2 py-0.5 rounded text-xs font-bold uppercase shrink-0" :class="{
+                                'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300': ruta.status === 'pending',
+                                'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300': ruta.status === 'completed',
+                                'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300': ruta.status === 'in_progress',
+                                'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300': ruta.status === 'cancelled'
+                              }">
+                                {{ ruta.status }}
+                              </span>
+                            </div>
+
+                            <!-- Right: Actions -->
+                            <div class="flex gap-2 shrink-0 ml-3">
+                              <button @click="editRuta(ruta)"
+                                class="text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline">
+                                Editar
+                              </button>
+                              <button @click="deleteRuta(ruta.id)"
+                                class="text-rose-600 dark:text-rose-400 font-bold text-xs hover:underline">
+                                Eliminar
+                              </button>
+                            </div>
                           </div>
 
-                          <!-- Right: Actions -->
-                          <div class="flex gap-2 shrink-0 ml-3">
-                            <button @click="editRuta(ruta)"
-                              class="text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline">
-                              Editar
-                            </button>
-                            <button @click="deleteRuta(ruta.id)"
-                              class="text-rose-600 dark:text-rose-400 font-bold text-xs hover:underline">
-                              Eliminar
-                            </button>
+                          <!-- Notes Section (if exists) -->
+                          <div v-if="ruta.notes" class="px-3 pb-3 border-t border-slate-200 dark:border-slate-700">
+                            <p class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">📝 Notas:</p>
+                            <p class="text-sm text-slate-700 dark:text-slate-300 italic">{{ ruta.notes }}</p>
                           </div>
                         </div>
                       </div>
@@ -577,6 +607,12 @@
             </select>
           </div>
 
+          <!-- Notas -->
+          <div>
+            <label class="label-driver-sm">Notas (Opcional)</label>
+            <textarea v-model="formRuta.notes" class="input-driver-sm resize-none" rows="3" placeholder="Agregar notas sobre esta visita..."></textarea>
+          </div>
+
           <div class="flex gap-3 pt-4">
             <button type="button" @click="closeRutaModal()"
               class="flex-1 py-3 text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancelar</button>
@@ -694,8 +730,10 @@ export default {
   name: 'AdminPanel',
   data() {
     return {
-      activeTab: 'vendedores',
+      activeTab: 'rutas',
       showSidebar: false, // NEW: Sidebar toggle
+      expandedDates: {}, // Track expanded dates for accordion
+      weekOffset: 0, // 0 = current week, -1 = last week, 1 = next week
       vendedores: [],
       clientes: [],
       rutas: [],
@@ -729,7 +767,7 @@ export default {
 
       formVendedor: { name: '', email: '', phone: '', is_active: true },
       formCliente: { name: '', address: '', phone: '', email: '', latitude: 0, longitude: 0, client_type: '' },
-      formRuta: { seller_id: '', client_id: '', planned_date: '', status: 'pending' },
+      formRuta: { seller_id: '', client_id: '', planned_date: '', status: 'pending', notes: '' },
 
       // Route creation helpers
       routeClientSearch: '',
@@ -760,23 +798,64 @@ export default {
     }
   },
   computed: {
+    currentWeekRange() {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const weekStart = new Date(today)
+      const dayOfWeek = today.getDay()
+      const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)
+      weekStart.setDate(diff)
+      weekStart.setDate(weekStart.getDate() + (this.weekOffset * 7))
+      
+      const weekEnd = new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000)
+      
+      // Calculate ISO week number
+      const date = new Date(weekStart)
+      date.setDate(date.getDate() + 4)
+      const yearStart = new Date(date.getFullYear(), 0, 1)
+      const weekNum = Math.ceil((((date - yearStart) / 86400000) + 1) / 7)
+      const year = weekStart.getFullYear()
+      
+      const options = { month: 'short', day: 'numeric' }
+      const startStr = weekStart.toLocaleDateString('es-ES', options)
+      const endStr = weekEnd.toLocaleDateString('es-ES', options)
+      
+      return `Semana ${weekNum} (${year}) - ${startStr} - ${endStr}`
+    },
     groupedRoutesByDate() {
-      // Group routes by date first, then by seller
+      // Group routes by date first, then by seller - ONLY SELECTED WEEK
       const grouped = {}
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const weekStart = new Date(today)
+      const dayOfWeek = today.getDay()
+      const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1) // Adjust to Monday
+      weekStart.setDate(diff)
+      
+      // Apply week offset (in days)
+      weekStart.setDate(weekStart.getDate() + (this.weekOffset * 7))
 
       this.rutas.forEach(ruta => {
-        const date = new Date(ruta.planned_date).toISOString().split('T')[0] // YYYY-MM-DD
-        const sellerId = ruta.seller_id
+        const routeDate = new Date(ruta.planned_date)
+        const dateStr = routeDate.toISOString().split('T')[0] // YYYY-MM-DD
+        const routeDateObj = new Date(dateStr)
+        routeDateObj.setHours(0, 0, 0, 0)
 
-        if (!grouped[date]) {
-          grouped[date] = {}
+        // Only include routes from the selected week
+        const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
+        if (routeDateObj >= weekStart && routeDateObj < weekEnd) {
+          const sellerId = ruta.seller_id
+
+          if (!grouped[dateStr]) {
+            grouped[dateStr] = {}
+          }
+
+          if (!grouped[dateStr][sellerId]) {
+            grouped[dateStr][sellerId] = []
+          }
+
+          grouped[dateStr][sellerId].push(ruta)
         }
-
-        if (!grouped[date][sellerId]) {
-          grouped[date][sellerId] = []
-        }
-
-        grouped[date][sellerId].push(ruta)
       })
 
       // Sort routes within each seller by time
@@ -1210,7 +1289,8 @@ export default {
             seller_id: this.formRuta.seller_id,
             client_id: this.formRuta.client_id,
             planned_date: plannedDateTime,
-            status: this.formRuta.status
+            status: this.formRuta.status,
+            notes: this.formRuta.notes || ''
           })
         })
 
@@ -1239,7 +1319,7 @@ export default {
     closeRutaModal() {
       this.showRutaModal = false
       this.editingRuta = null
-      this.formRuta = { seller_id: '', client_id: '', planned_date: '', status: 'pending' }
+      this.formRuta = { seller_id: '', client_id: '', planned_date: '', status: 'pending', notes: '' }
       this.routeClientSearch = ''
       this.routeClientSearchOpen = false
       this.filteredRouteClientes = []
@@ -1269,19 +1349,23 @@ export default {
       return new Date(date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     },
     formatDateHeader(dateStr) {
-      const date = new Date(dateStr)
+      const date = new Date(dateStr + 'T00:00:00')
       const today = new Date()
+      today.setHours(0, 0, 0, 0)
       const tomorrow = new Date(today)
       tomorrow.setDate(tomorrow.getDate() + 1)
+      
+      const dateOnly = new Date(date)
+      dateOnly.setHours(0, 0, 0, 0)
 
       // Check if it's today or tomorrow
-      if (date.toDateString() === today.toDateString()) {
+      if (dateOnly.getTime() === today.getTime()) {
         return 'Hoy'
-      } else if (date.toDateString() === tomorrow.toDateString()) {
+      } else if (dateOnly.getTime() === tomorrow.getTime()) {
         return 'Mañana'
       } else {
         // Return day name and date
-        return date.toLocaleDateString('es-ES', { weekday: 'long', month: 'short', day: 'numeric' })
+        return new Date(dateStr + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', month: 'short', day: 'numeric' })
       }
     },
     formatTime(dateStr) {
