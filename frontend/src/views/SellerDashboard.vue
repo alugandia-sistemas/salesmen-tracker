@@ -230,7 +230,7 @@
             <div v-show="expandedDates[dateStr]" class="divide-y divide-gray-100">
               <div v-for="route in dayEvents" :key="route.id" class="p-3">
                 <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 hover:border-gray-900 transition">
-                  <div class="flex items-start justify-between">
+                  <div class="flex items-start justify-between mb-2">
                     <div>
                       <p class="font-bold text-gray-900">{{ formatTime(route.planned_date) }}</p>
                       <p class="text-sm text-gray-600">{{ getClientName(route.client_id) }}</p>
@@ -246,6 +246,12 @@
                          route.status === 'in_progress' ? 'EN PROGRESO' :
                          route.status === 'cancelled' ? 'CANCELADA' : 'PENDIENTE' }}
                     </span>
+                  </div>
+
+                  <!-- Notes Section (if exists) -->
+                  <div v-if="route.notes" class="mt-2 pt-2 border-t border-gray-200">
+                    <p class="text-xs font-semibold text-gray-600 mb-1">📝 Notas:</p>
+                    <p class="text-sm text-gray-700">{{ route.notes }}</p>
                   </div>
                 </div>
               </div>

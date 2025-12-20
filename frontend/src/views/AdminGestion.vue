@@ -322,12 +322,12 @@
 
                             <!-- Right: Actions -->
                             <div class="flex gap-2 shrink-0 ml-3">
-                              <button @click="editRuta(ruta)" :disabled="ruta.status === 'completed'"
-                                class="text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline disabled:text-slate-400 disabled:cursor-not-allowed">
+                              <button @click="editRuta(ruta)"
+                                class="text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline">
                                 Editar
                               </button>
-                              <button @click="deleteRuta(ruta.id)" :disabled="ruta.status === 'completed'"
-                                class="text-rose-600 dark:text-rose-400 font-bold text-xs hover:underline disabled:text-slate-400 disabled:cursor-not-allowed">
+                              <button @click="deleteRuta(ruta.id)"
+                                class="text-rose-600 dark:text-rose-400 font-bold text-xs hover:underline">
                                 Eliminar
                               </button>
                             </div>
@@ -607,6 +607,12 @@
             </select>
           </div>
 
+          <!-- Notas -->
+          <div>
+            <label class="label-driver-sm">Notas (Opcional)</label>
+            <textarea v-model="formRuta.notes" class="input-driver-sm resize-none" rows="3" placeholder="Agregar notas sobre esta visita..."></textarea>
+          </div>
+
           <div class="flex gap-3 pt-4">
             <button type="button" @click="closeRutaModal()"
               class="flex-1 py-3 text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancelar</button>
@@ -761,7 +767,7 @@ export default {
 
       formVendedor: { name: '', email: '', phone: '', is_active: true },
       formCliente: { name: '', address: '', phone: '', email: '', latitude: 0, longitude: 0, client_type: '' },
-      formRuta: { seller_id: '', client_id: '', planned_date: '', status: 'pending' },
+      formRuta: { seller_id: '', client_id: '', planned_date: '', status: 'pending', notes: '' },
 
       // Route creation helpers
       routeClientSearch: '',
@@ -1283,7 +1289,8 @@ export default {
             seller_id: this.formRuta.seller_id,
             client_id: this.formRuta.client_id,
             planned_date: plannedDateTime,
-            status: this.formRuta.status
+            status: this.formRuta.status,
+            notes: this.formRuta.notes || ''
           })
         })
 
@@ -1312,7 +1319,7 @@ export default {
     closeRutaModal() {
       this.showRutaModal = false
       this.editingRuta = null
-      this.formRuta = { seller_id: '', client_id: '', planned_date: '', status: 'pending' }
+      this.formRuta = { seller_id: '', client_id: '', planned_date: '', status: 'pending', notes: '' }
       this.routeClientSearch = ''
       this.routeClientSearchOpen = false
       this.filteredRouteClientes = []
