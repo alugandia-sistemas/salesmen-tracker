@@ -100,7 +100,7 @@
 
       <!-- SCHEDULE SECTION -->
       <div v-if="activeSection === 'schedule'">
-        <h2 class="text-lg font-bold text-gray-900 mb-4">📊 RESUMEN DE LA SEMANA</h2>
+        <h2 class="text-lg font-bold text-gray-900 mb-4">📊 RESUMEN DE ACTIVIDAD</h2>
 
         <div v-if="loadingStats" class="text-center py-10">
           <p class="text-gray-500">Cargando estadísticas...</p>
