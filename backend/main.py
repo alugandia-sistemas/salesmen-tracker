@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query, Body, Form
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, Enum, create_engine, text, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
@@ -6,7 +9,9 @@ from sqlalchemy.orm import Session, relationship, sessionmaker, joinedload
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from geoalchemy2 import Geometry, Geography
 from geoalchemy2.elements import WKTElement
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, time
+import csv
+import io
 from pydantic import BaseModel
 from typing import Optional, List
 import uuid
@@ -150,6 +155,25 @@ async def startup_event():
                 conn.execute(text("ALTER TABLE routes ADD COLUMN times_postponed INTEGER DEFAULT 0"))
                 conn.commit()
                 print("✅ Migration done (postponement columns).")
+
+            # visits: visit_result / quick_notes / detailed_notes (check-in v2)
+            for col, ddl in [
+                ("visit_result", "ALTER TABLE visits ADD COLUMN visit_result VARCHAR(20)"),
+                ("quick_notes", "ALTER TABLE visits ADD COLUMN quick_notes VARCHAR(100)"),
+                ("detailed_notes", "ALTER TABLE visits ADD COLUMN detailed_notes TEXT"),
+            ]:
+                chk = conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_name='visits' AND column_name=:col"
+                    ),
+                    {"col": col},
+                )
+                if not chk.fetchone():
+                    print(f"⚠️ Migrating: Adding {col} to visits...")
+                    conn.execute(text(ddl))
+                    conn.commit()
+                    print(f"✅ Migration done ({col}).")
     except Exception as e:
         print(f"Migration warning: {e}")
 
@@ -303,6 +327,11 @@ class Visit(Base):
     # ✅ AUDITORÍA DE FRAUDE
     fraud_flags = Column(Text, nullable=True)  # JSON con flags de posible fraude
     notes = Column(Text, nullable=True)
+
+    # Resultado de visita (check-in v2): venta, no_venta, interesado, seguimiento, ausente
+    visit_result = Column(String(20), nullable=True)
+    quick_notes = Column(String(100), nullable=True)
+    detailed_notes = Column(Text, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -605,6 +634,76 @@ def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> fl
     return R * c
 
 
+def _client_lat_lng(db: Session, client_id: uuid.UUID) -> Optional[tuple[float, float]]:
+    """Extrae (lat, lng) del Geography POINT del cliente."""
+    row = db.query(
+        func.ST_Y(func.ST_GeomFromWKB(func.ST_AsBinary(Client.location))).label("lat"),
+        func.ST_X(func.ST_GeomFromWKB(func.ST_AsBinary(Client.location))).label("lng"),
+    ).filter(Client.id == client_id).first()
+    if row and row.lat is not None and row.lng is not None:
+        return (float(row.lat), float(row.lng))
+    return None
+
+
+def _visit_checkin_lat_lng(db: Session, visit_id: uuid.UUID) -> Optional[tuple[float, float]]:
+    """Extrae (lat, lng) del check-in GPS de una visita."""
+    row = db.query(
+        func.ST_Y(func.ST_GeomFromWKB(func.ST_AsBinary(Visit.checkin_location))).label("lat"),
+        func.ST_X(func.ST_GeomFromWKB(func.ST_AsBinary(Visit.checkin_location))).label("lng"),
+    ).filter(Visit.id == visit_id).first()
+    if row and row.lat is not None and row.lng is not None:
+        return (float(row.lat), float(row.lng))
+    return None
+
+
+def _tracking_hq_coords() -> tuple[float, float]:
+    """Punto de partida por defecto (sede) desde env o Madrid."""
+    lat = float(os.getenv("TRACKING_HQ_LAT", "40.4168"))
+    lng = float(os.getenv("TRACKING_HQ_LNG", "-3.7038"))
+    return lat, lng
+
+
+def _avg_speed_kmh() -> float:
+    return float(os.getenv("AVG_SPEED_KMH", "30"))
+
+
+def send_smtp_notification(subject: str, body: str) -> bool:
+    """
+    Envía email vía SMTP si está configurado (SMTP_HOST, SMTP_FROM, etc.).
+    Si falta configuración, no hace nada y devuelve False.
+    """
+    host = os.getenv("SMTP_HOST")
+    if not host:
+        return False
+    port = int(os.getenv("SMTP_PORT", "587"))
+    user = os.getenv("SMTP_USER", "")
+    password = os.getenv("SMTP_PASSWORD", "")
+    mail_from = os.getenv("SMTP_FROM", user)
+    mail_to = os.getenv("NOTIFY_TO_EMAIL", "")
+    if not mail_from or not mail_to:
+        return False
+    try:
+        import smtplib
+        from email.message import EmailMessage
+
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = mail_from
+        msg["To"] = mail_to
+        msg.set_content(body)
+
+        with smtplib.SMTP(host, port, timeout=30) as smtp:
+            if os.getenv("SMTP_USE_TLS", "1") not in ("0", "false", "False"):
+                smtp.starttls()
+            if user and password:
+                smtp.login(user, password)
+            smtp.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"SMTP notification failed: {e}")
+        return False
+
+
 def validate_checkin(
     distance_meters: float,
     checkin_time: datetime,
@@ -866,78 +965,78 @@ class TrackingResponse(BaseModel):
 @app.get("/sellers/{seller_id}/tracking/today", response_model=TrackingResponse)
 def get_route_tracking(seller_id: str, db: Session = Depends(get_db)):
     """
-    Calcula el estado de la ruta de HOY para el panel de Admin.
-    Devuelve: Progreso, Parada Actual, Distancia (estimada) y ETA.
+    Estado de la ruta del día: progreso, siguiente parada, distancia (Haversine) y ETA.
+    Origen del tramo: último GPS de check-in hoy, o ubicación del cliente de esa visita, o sede (TRACKING_HQ_LAT/LNG).
+    Velocidad media: AVG_SPEED_KMH (default 30).
     """
     try:
         seller_uuid = uuid.UUID(seller_id)
         today = datetime.utcnow().date()
-        
-        # 1. Get Routes for Today
-        routes = db.query(Route).filter(
-            Route.seller_id == seller_uuid,
-            func.date(Route.planned_date) == today
-        ).order_by(Route.planned_date).all() # Ordenar por hora checkin o planificada
-        
-        total = len(routes)
-        completed = sum(1 for r in routes if r.status == 'completed')
-        progress = int((completed / total * 100)) if total > 0 else 0
-        
-        # 2. Find Next Stop (First pending)
-        pending_routes = [r for r in routes if r.status == 'pending' or r.status == 'in_progress']
-        current_route = pending_routes[0] if pending_routes else None
-        
-        # 3. Calculate Distance
-        # Logic: From (Last Completed Location OR HQ) -> To (Next Client Location)
-        # Using simplified haversine for MVP or PostGIS if available. Using PostGIS here via query is cleaner but complex python-side.
-        # We will assume Start Point is the Seller's last known visit location.
-        
-        start_lat, start_lng = 40.4168, -3.7038 # Default Madrid (HQ)
-        
-        # Get last completed visit today
-        last_visit = db.query(Visit).filter(
-            Visit.seller_id == seller_uuid,
-            func.date(Visit.created_at) == today
-        ).order_by(Visit.created_at.desc()).first()
-        
-        if last_visit:
-             # Extract lat/lng from visit location WKT/Point logic is tedious in raw python without geo-lib methods mapped.
-             # We query DB for coordinate extraction for simplicity if needed, or assume last_visit had coords saved in snapshot?
-             # Visit model doesn't explicitly store snapshot lat/lng column in clean way above, checks specific logic.
-             # Let's use the Client's location of the last completed route as proxy.
-            if last_visit.client_id:
-                 # Get client location
-                 client_loc = db.query(Client.location).filter(Client.id == last_visit.client_id).scalar()
-                 # Convert to lat/lng using ST_X/ST_Y helper? Or just 0 for MVP if complex.
-                 # Let's do a trick: If we have client coords in client table.
-                 pass
 
-        # Target Location
+        routes = (
+            db.query(Route)
+            .filter(
+                Route.seller_id == seller_uuid,
+                func.date(Route.planned_date) == today,
+            )
+            .order_by(Route.visit_order.asc(), Route.planned_date.asc())
+            .all()
+        )
+
+        total = len(routes)
+        completed = sum(1 for r in routes if r.status == "completed")
+        progress = int((completed / total * 100)) if total > 0 else 0
+
+        pending_routes = [r for r in routes if r.status in ("pending", "in_progress")]
+
+        start_lat, start_lng = _tracking_hq_coords()
+
+        last_visit_today = (
+            db.query(Visit)
+            .join(Route, Visit.route_id == Route.id)
+            .filter(
+                Visit.seller_id == seller_uuid,
+                Route.seller_id == seller_uuid,
+                func.date(Route.planned_date) == today,
+                Visit.checkin_time.isnot(None),
+            )
+            .order_by(Visit.checkin_time.desc())
+            .first()
+        )
+        if last_visit_today:
+            chk = _visit_checkin_lat_lng(db, last_visit_today.id)
+            if chk:
+                start_lat, start_lng = chk[0], chk[1]
+            else:
+                clat = _client_lat_lng(db, last_visit_today.client_id)
+                if clat:
+                    start_lat, start_lng = clat[0], clat[1]
+
+        current_route = pending_routes[0] if pending_routes else None
+
         dist_km = 0.0
         eta_min = 0
-        
-        current_data = {
-           "id": None, "client": "No active route", "address": ""
-        }
+        next_stop_time = None
+        current_data = {"id": None, "client": "No active route", "address": ""}
 
         if current_route:
-             # Get current client
-             client = db.query(Client).filter(Client.id == current_route.client_id).first()
-             if client:
-                 current_data = {
-                     "id": str(current_route.id),
-                     "client": client.name,
-                     "address": client.address
-                 }
-                 
-                 # Calculate Distance (SQLAlchemy func.ST_DistanceSphere)
-                 # Dist from Last Visit (or Random Point) to Client
-                 # For MVP Demo: Random reasonable number or fixed calc if no real GPS stream.
-                 # Let's Mock it slightly for stable UI demo unless we have real GPS stream table.
-                 # User didn't give me a GPS stream table. 
-                 dist_km = 12.5 # Mock: "12.5 km"
-                 eta_min = 25   # Mock: "25 min" (30km/h avg)
-        
+            client = db.query(Client).filter(Client.id == current_route.client_id).first()
+            if client:
+                current_data = {
+                    "id": str(current_route.id),
+                    "client": client.name,
+                    "address": client.address,
+                }
+                tgt = _client_lat_lng(db, client.id)
+                if tgt:
+                    tlat, tlng = tgt
+                    dist_m = calculate_distance(start_lat, start_lng, tlat, tlng)
+                    dist_km = round(dist_m / 1000.0, 2)
+                    speed = _avg_speed_kmh()
+                    if speed > 0:
+                        eta_min = max(1, int((dist_km / speed) * 60))
+                    next_stop_time = (datetime.utcnow() + timedelta(minutes=eta_min)).strftime("%H:%M")
+
         return {
             "total_stops": total,
             "completed_stops": completed,
@@ -948,15 +1047,22 @@ def get_route_tracking(seller_id: str, db: Session = Depends(get_db)):
             "current_address": current_data["address"],
             "distance_remaining_km": dist_km,
             "eta_minutes": eta_min,
-            "next_stop_time": (datetime.now() + timedelta(minutes=eta_min)).strftime("%H:%M") 
+            "next_stop_time": next_stop_time,
         }
 
     except Exception as e:
         print(f"Tracking Error: {e}")
-        # Return empty safe struct
         return {
-            "total_stops": 0, "completed_stops": 0, "pending_stops": 0, "progress_percentage": 0,
-            "distance_remaining_km": 0, "eta_minutes": 0
+            "total_stops": 0,
+            "completed_stops": 0,
+            "pending_stops": 0,
+            "progress_percentage": 0,
+            "current_stop_id": None,
+            "current_client_name": None,
+            "current_address": None,
+            "distance_remaining_km": 0.0,
+            "eta_minutes": 0,
+            "next_stop_time": None,
         }
 
 
@@ -1630,6 +1736,121 @@ def reorder_routes(
     return {"message": "Routes reordered successfully"}
 
 
+class OptimizeOrderRequest(BaseModel):
+    """Heurística nearest-neighbor sobre coordenadas de clientes (MVP, no TSP óptimo)."""
+
+    seller_id: str
+    planned_date: str  # YYYY-MM-DD
+    start_latitude: Optional[float] = None
+    start_longitude: Optional[float] = None
+    route_ids: Optional[List[str]] = None
+
+
+@app.post("/routes/optimize-order/")
+def optimize_route_order(request: OptimizeOrderRequest, db: Session = Depends(get_db)):
+    """
+    Reordena `visit_order` (0..n-1) para las rutas del día del vendedor usando vecino más cercano.
+    Punto de partida: `start_latitude`/`start_longitude`, o TRACKING_HQ_LAT/LNG.
+    Solo considera rutas en estado `pending` o `in_progress`.
+    """
+    try:
+        seller_uuid = uuid.UUID(request.seller_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="seller_id inválido")
+
+    try:
+        day = datetime.strptime(request.planned_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="planned_date debe ser YYYY-MM-DD")
+
+    q = (
+        db.query(Route)
+        .options(joinedload(Route.client))
+        .filter(
+            Route.seller_id == seller_uuid,
+            func.date(Route.planned_date) == day,
+            Route.status.in_(["pending", "in_progress"]),
+        )
+    )
+    if request.route_ids:
+        uuids = []
+        for rid in request.route_ids:
+            try:
+                uuids.append(uuid.UUID(rid))
+            except ValueError:
+                continue
+        if uuids:
+            q = q.filter(Route.id.in_(uuids))
+
+    routes = q.all()
+    if not routes:
+        return {
+            "message": "No hay rutas pendientes o en curso para optimizar",
+            "ordered_route_ids": [],
+            "total_distance_km": 0.0,
+            "heuristic": "nearest_neighbor",
+        }
+
+    # Puntos (route_id, lat, lng)
+    points: List[tuple[Route, float, float]] = []
+    for r in routes:
+        if not r.client_id:
+            continue
+        ll = _client_lat_lng(db, r.client_id)
+        if ll:
+            points.append((r, ll[0], ll[1]))
+
+    if len(points) <= 1:
+        for i, r in enumerate(routes):
+            r.visit_order = i
+        db.commit()
+        return {
+            "message": "Orden actualizado (pocas paradas con coordenadas)",
+            "ordered_route_ids": [str(r.id) for r in routes],
+            "total_distance_km": 0.0,
+            "heuristic": "nearest_neighbor",
+        }
+
+    if request.start_latitude is not None and request.start_longitude is not None:
+        cur_lat, cur_lng = request.start_latitude, request.start_longitude
+    else:
+        cur_lat, cur_lng = _tracking_hq_coords()
+
+    remaining = points.copy()
+    ordered: List[Route] = []
+    total_m = 0.0
+
+    while remaining:
+        best_i = 0
+        best_d = None
+        for i, (_, plat, plng) in enumerate(remaining):
+            d = calculate_distance(cur_lat, cur_lng, plat, plng)
+            if best_d is None or d < best_d:
+                best_d = d
+                best_i = i
+        route, nlat, nlng = remaining.pop(best_i)
+        total_m += best_d or 0.0
+        ordered.append(route)
+        cur_lat, cur_lng = nlat, nlng
+
+    for i, r in enumerate(ordered):
+        r.visit_order = i
+    # Rutas sin coordenadas al final
+    extra = [r for r in routes if r not in ordered]
+    base = len(ordered)
+    for j, r in enumerate(extra):
+        r.visit_order = base + j
+
+    db.commit()
+
+    return {
+        "message": "visit_order actualizado (heurística vecino más cercano)",
+        "ordered_route_ids": [str(r.id) for r in ordered + extra],
+        "total_distance_km": round(total_m / 1000.0, 3),
+        "heuristic": "nearest_neighbor",
+    }
+
+
 @app.delete("/routes/{route_id}")
 def delete_route(route_id: str, db: Session = Depends(get_db)):
     """Eliminar ruta"""
@@ -1998,7 +2219,7 @@ def get_seller_route_history(
             visit_data = {
                 "id": str(last_visit.id),
                 "checkin_time": last_visit.checkin_time.isoformat() if last_visit.checkin_time else None,
-                "visit_result": last_visit.visit_result.value if hasattr(last_visit, 'visit_result') and last_visit.visit_result else None,
+                "visit_result": last_visit.visit_result if getattr(last_visit, "visit_result", None) else None,
                 "quick_notes": getattr(last_visit, 'quick_notes', None),
                 "detailed_notes": getattr(last_visit, 'detailed_notes', last_visit.notes),
                 "checkin_is_valid": last_visit.checkin_is_valid,
@@ -2122,22 +2343,21 @@ async def checkin_v2(
         client_id=client_id
     )
     
-    # Crear visita
+    # Crear visita (Geography: WKTElement coherente con Client.location)
     visit = Visit(
         route_id=route_id,
         seller_id=seller_id,
         client_id=client_id,
         checkin_time=checkin_time,
-        checkin_location=func.ST_GeomFromText(checkin_point_wkt, 4326),
+        checkin_location=WKTElement(checkin_point_wkt, srid=4326),
         checkin_distance_meters=distance_meters,
         checkin_is_valid=is_valid,
         checkin_validation_error=error_message,
         fraud_flags="|".join(fraud_flags) if fraud_flags else None,
-        # Nuevos campos v2
         visit_result=request['visit_result'],
         quick_notes=quick_notes,
         detailed_notes=request.get('detailed_notes'),
-        notes=request.get('detailed_notes')  # Compatibilidad con campo antiguo
+        notes=request.get('detailed_notes'),
     )
     
     db.add(visit)
@@ -2375,7 +2595,21 @@ def postpone_route(
             response_data["message"] += " Cliente marcado como inactivo."
     
     db.commit()
-    
+
+    try:
+        seller = db.query(Seller).filter(Seller.id == route.seller_id).first()
+        seller_name = seller.name if seller else str(route.seller_id)
+        subj = f"[Salesmen] Ruta aplazada — {seller_name}"
+        body = (
+            f"Vendedor: {seller_name}\n"
+            f"Ruta ID: {route_id}\n"
+            f"Razón: {get_reason_label(reason)}\n"
+            f"{response_data.get('message', '')}\n"
+        )
+        send_smtp_notification(subj, body)
+    except Exception as ex:
+        print(f"Postpone notify: {ex}")
+
     return response_data
 
 
@@ -2463,7 +2697,7 @@ def get_seller_clients_with_history(
                 last_visit_data = {
                     "id": str(last_visit.id),
                     "date": last_visit.checkin_time.isoformat() if last_visit.checkin_time else None,
-                    "result": last_visit.visit_result.value if hasattr(last_visit, 'visit_result') and last_visit.visit_result else None,
+                    "result": last_visit.visit_result if getattr(last_visit, "visit_result", None) else None,
                     "quick_notes": getattr(last_visit, 'quick_notes', None),
                     "detailed_notes": getattr(last_visit, 'detailed_notes', last_visit.notes)
                 }
@@ -2676,7 +2910,7 @@ async def checkin(
             client_id=client_id,
             
             checkin_time=checkin_time,
-            checkin_location=func.ST_GeomFromText(checkin_point_wkt, 4326),
+            checkin_location=WKTElement(checkin_point_wkt, srid=4326),
             checkin_distance_meters=distance_meters,
             checkin_photo_url=photo_url,
             
@@ -2954,6 +3188,283 @@ def create_opportunity(
     db.refresh(opportunity)
     
     return opportunity
+
+
+# --- EXPORT CSV & REPORTS ---
+
+def _period_bounds(date_from: date, date_to: date) -> tuple[datetime, datetime]:
+    if date_from > date_to:
+        raise HTTPException(status_code=400, detail="date_from no puede ser posterior a date_to")
+    start_dt = datetime.combine(date_from, time.min)
+    end_dt = datetime.combine(date_to, time.max)
+    return start_dt, end_dt
+
+
+def _filename_stem(prefix: str, date_from: date, date_to: date) -> str:
+    return f"{prefix}_{date_from.isoformat()}_{date_to.isoformat()}"
+
+
+@app.get("/export/routes/")
+def export_routes_csv(
+    date_from: date = Query(..., description="Inicio del periodo (fecha planificada de la ruta)"),
+    date_to: date = Query(..., description="Fin del periodo"),
+    seller_id: Optional[uuid.UUID] = Query(None, description="Filtrar por vendedor"),
+    status: Optional[str] = Query(None, description="Filtrar por estado de ruta"),
+    db: Session = Depends(get_db),
+):
+    """
+    Exporta rutas en CSV (UTF-8 con BOM para Excel).
+    Filtra por `planned_date` dentro del rango [date_from, date_to].
+    """
+    start_dt, end_dt = _period_bounds(date_from, date_to)
+
+    query = (
+        db.query(Route)
+        .options(joinedload(Route.seller), joinedload(Route.client))
+        .filter(Route.planned_date >= start_dt, Route.planned_date <= end_dt)
+    )
+    if seller_id is not None:
+        query = query.filter(Route.seller_id == seller_id)
+    if status:
+        query = query.filter(Route.status == status)
+    query = query.order_by(Route.planned_date.asc(), Route.visit_order.asc())
+
+    def generate():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow([
+            "route_id",
+            "seller_id",
+            "seller_name",
+            "client_id",
+            "client_name",
+            "planned_date",
+            "status",
+            "visit_order",
+            "times_postponed",
+            "postpone_reason",
+            "created_at",
+        ])
+        first = buf.getvalue()
+        buf.seek(0)
+        buf.truncate(0)
+        yield "\ufeff" + first
+
+        for route in query.all():
+            seller_name = route.seller.name if route.seller else ""
+            client_name = route.client.name if route.client else ""
+            writer.writerow([
+                str(route.id),
+                str(route.seller_id),
+                seller_name,
+                str(route.client_id),
+                client_name,
+                route.planned_date.isoformat() if route.planned_date else "",
+                route.status or "",
+                route.visit_order if route.visit_order is not None else "",
+                route.times_postponed if route.times_postponed is not None else 0,
+                route.postpone_reason or "",
+                route.created_at.isoformat() if route.created_at else "",
+            ])
+            yield buf.getvalue()
+            buf.seek(0)
+            buf.truncate(0)
+
+    filename = _filename_stem("routes", date_from, date_to) + ".csv"
+    return StreamingResponse(
+        generate(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/export/visits/")
+def export_visits_csv(
+    date_from: date = Query(..., description="Inicio del periodo (check-in o creación)"),
+    date_to: date = Query(..., description="Fin del periodo"),
+    seller_id: Optional[uuid.UUID] = Query(None, description="Filtrar por vendedor"),
+    db: Session = Depends(get_db),
+):
+    """
+    Exporta visitas en CSV. Filtra por `coalesce(checkin_time, created_at)` en el rango.
+    """
+    start_dt, end_dt = _period_bounds(date_from, date_to)
+    visit_ts = func.coalesce(Visit.checkin_time, Visit.created_at)
+
+    query = (
+        db.query(Visit)
+        .options(joinedload(Visit.seller), joinedload(Visit.client))
+        .filter(visit_ts >= start_dt, visit_ts <= end_dt)
+    )
+    if seller_id is not None:
+        query = query.filter(Visit.seller_id == seller_id)
+    query = query.order_by(visit_ts.desc())
+
+    def generate():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow([
+            "visit_id",
+            "seller_id",
+            "seller_name",
+            "client_id",
+            "client_name",
+            "route_id",
+            "checkin_time",
+            "checkout_time",
+            "checkin_is_valid",
+            "checkin_distance_meters",
+            "checkin_validation_error",
+            "fraud_flags",
+            "notes",
+            "created_at",
+        ])
+        first = buf.getvalue()
+        buf.seek(0)
+        buf.truncate(0)
+        yield "\ufeff" + first
+
+        for visit in query.all():
+            seller_name = visit.seller.name if visit.seller else ""
+            client_name = visit.client.name if visit.client else ""
+            writer.writerow([
+                str(visit.id),
+                str(visit.seller_id),
+                seller_name,
+                str(visit.client_id),
+                client_name,
+                str(visit.route_id),
+                visit.checkin_time.isoformat() if visit.checkin_time else "",
+                visit.checkout_time.isoformat() if visit.checkout_time else "",
+                "1" if visit.checkin_is_valid else "0",
+                f"{visit.checkin_distance_meters:.2f}" if visit.checkin_distance_meters is not None else "",
+                visit.checkin_validation_error or "",
+                visit.fraud_flags or "",
+                (visit.notes or "").replace("\n", " ").replace("\r", " "),
+                visit.created_at.isoformat() if visit.created_at else "",
+            ])
+            yield buf.getvalue()
+            buf.seek(0)
+            buf.truncate(0)
+
+    filename = _filename_stem("visits", date_from, date_to) + ".csv"
+    return StreamingResponse(
+        generate(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/reports/seller-performance/")
+def reports_seller_performance(
+    date_from: date = Query(..., description="Inicio del periodo (ISO date)"),
+    date_to: date = Query(..., description="Fin del periodo (ISO date)"),
+    seller_ids: Optional[List[uuid.UUID]] = Query(
+        None,
+        description="UUIDs de vendedores (repetir parámetro). Si se omite, todos los vendedores.",
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    Informe agregado por vendedor: visitas, rutas completadas y aplazadas,
+    % check-ins válidos y oportunidades creadas en el periodo.
+    """
+    start_dt, end_dt = _period_bounds(date_from, date_to)
+
+    sellers_q = db.query(Seller)
+    if seller_ids:
+        sellers_q = sellers_q.filter(Seller.id.in_(seller_ids))
+    sellers = sellers_q.order_by(Seller.name.asc()).all()
+
+    visit_ts = func.coalesce(Visit.checkin_time, Visit.created_at)
+
+    rows = []
+    for seller in sellers:
+        sid = seller.id
+
+        visits_total = (
+            db.query(func.count(Visit.id))
+            .filter(
+                Visit.seller_id == sid,
+                visit_ts >= start_dt,
+                visit_ts <= end_dt,
+            )
+            .scalar()
+            or 0
+        )
+
+        visits_valid = (
+            db.query(func.count(Visit.id))
+            .filter(
+                Visit.seller_id == sid,
+                visit_ts >= start_dt,
+                visit_ts <= end_dt,
+                Visit.checkin_is_valid == True,
+            )
+            .scalar()
+            or 0
+        )
+
+        routes_completed = (
+            db.query(func.count(Route.id))
+            .filter(
+                Route.seller_id == sid,
+                Route.planned_date >= start_dt,
+                Route.planned_date <= end_dt,
+                Route.status == "completed",
+            )
+            .scalar()
+            or 0
+        )
+
+        routes_postponed = (
+            db.query(func.count(Route.id))
+            .filter(
+                Route.seller_id == sid,
+                Route.planned_date >= start_dt,
+                Route.planned_date <= end_dt,
+                Route.status == "postponed",
+            )
+            .scalar()
+            or 0
+        )
+
+        opportunities_created = (
+            db.query(func.count(Opportunity.id))
+            .filter(
+                Opportunity.seller_id == sid,
+                Opportunity.created_at >= start_dt,
+                Opportunity.created_at <= end_dt,
+            )
+            .scalar()
+            or 0
+        )
+
+        checkins_valid_pct = (
+            round((visits_valid / visits_total) * 100, 1) if visits_total else 0.0
+        )
+
+        rows.append(
+            {
+                "seller_id": str(sid),
+                "seller_name": seller.name,
+                "seller_email": seller.email,
+                "visits_total": visits_total,
+                "routes_completed": routes_completed,
+                "routes_postponed": routes_postponed,
+                "checkins_valid": visits_valid,
+                "checkins_valid_pct": checkins_valid_pct,
+                "opportunities_created": opportunities_created,
+            }
+        )
+
+    return {
+        "period": {
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+        },
+        "sellers": rows,
+    }
 
 
 # --- HEALTH CHECK ---
